@@ -1,0 +1,214 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --easytrade-green: 135 100% 50%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --easytrade-green: 135 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 0.85rem; /* Genel yazı boyutunu daha da küçült */
+  }
+
+  html {
+    scroll-behavior: smooth;
+    font-size: 13px; /* Root font size'ı daha da küçült */
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, hsl(var(--easytrade-green) / 0.3), hsl(var(--easytrade-green) / 0.6));
+  @apply rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, hsl(var(--easytrade-green) / 0.5), hsl(var(--easytrade-green) / 0.8));
+}
+
+/* Smooth transitions */
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow,
+    transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid hsl(var(--easytrade-green));
+  outline-offset: 2px;
+  border-radius: 0.75rem;
+}
+
+/* Improved hover effects */
+.group:hover .group-hover\:scale-110 {
+  transform: scale(1.1);
+}
+
+.group:hover .group-hover\:scale-105 {
+  transform: scale(1.05);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  html {
+    font-size: 12px; /* Mobilde daha da küçük */
+  }
+
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Reduce motion for mobile users who prefer it */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 13px; /* Desktop'ta da küçük tut */
+  }
+}
+
+/* Enhanced card animations */
+@keyframes cardHover {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    transform: translateY(-6px) scale(1.02);
+  }
+}
+
+.card-hover:hover {
+  animation: cardHover 0.3s ease-out forwards;
+}
+
+/* Prose styling for blog content */
+.prose {
+  @apply text-foreground;
+  font-size: 0.9rem; /* Blog içeriği için küçük font */
+  line-height: 1.6;
+}
+
+.prose h2 {
+  @apply text-lg font-bold text-foreground mt-5 mb-2; /* h2'leri daha da küçült */
+}
+
+.prose h3 {
+  @apply text-base font-semibold text-foreground mt-4 mb-2; /* h3'leri daha da küçült */
+}
+
+.prose p {
+  @apply text-muted-foreground leading-relaxed mb-2; /* Paragraf spacing'i daha da küçült */
+}
+
+.prose ul,
+.prose ol {
+  @apply text-muted-foreground mb-3;
+}
+
+.prose li {
+  @apply mb-1;
+}
+
+.prose strong {
+  @apply text-foreground font-semibold;
+}
+
+.prose blockquote {
+  border-left: 4px solid hsl(var(--easytrade-green));
+  @apply pl-4 italic text-muted-foreground bg-muted/50 py-2 my-4 rounded-r-xl;
+}
+
+.prose blockquote cite {
+  @apply text-sm font-medium text-foreground not-italic;
+}
+
+.prose code {
+  @apply bg-muted px-2 py-1 rounded-lg text-sm font-mono;
+}
+
+.prose pre {
+  @apply bg-muted p-4 rounded-xl overflow-x-auto;
+}
+
+/* Auto-rows-fr for equal height cards */
+.auto-rows-fr {
+  grid-auto-rows: 1fr;
+}
