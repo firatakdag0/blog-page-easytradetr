@@ -36,6 +36,52 @@ class ApiCache {
 
 const apiCache = new ApiCache()
 
+// Auth token management
+class AuthTokenManager {
+  private static TOKEN_KEY = 'admin_auth_token'
+  private static USER_KEY = 'admin_user_data'
+
+  static getToken(): string | null {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem(this.TOKEN_KEY)
+  }
+
+  static setToken(token: string): void {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(this.TOKEN_KEY, token)
+  }
+
+  static removeToken(): void {
+    if (typeof window === 'undefined') return
+    localStorage.removeItem(this.TOKEN_KEY)
+  }
+
+  static getUser(): any | null {
+    if (typeof window === 'undefined') return null
+    const userData = localStorage.getItem(this.USER_KEY)
+    return userData ? JSON.parse(userData) : null
+  }
+
+  static setUser(user: any): void {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(this.USER_KEY, JSON.stringify(user))
+  }
+
+  static removeUser(): void {
+    if (typeof window === 'undefined') return
+    localStorage.removeItem(this.USER_KEY)
+  }
+
+  static isAuthenticated(): boolean {
+    return !!this.getToken()
+  }
+
+  static logout(): void {
+    this.removeToken()
+    this.removeUser()
+  }
+}
+
 // Utility function to format datetime for Turkish timezone
 export function formatDateTimeForAPI(dateTimeString: string): string {
   if (!dateTimeString) return ""
@@ -297,6 +343,12 @@ class ApiClient {
       headers["Content-Type"] = "application/json"
     }
 
+    // Auth token ekle (eğer varsa)
+    const token = AuthTokenManager.getToken()
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`
+    }
+
     // Diğer header'ları ekle
     if (options?.headers) {
       Object.assign(headers, options.headers)
@@ -306,6 +358,12 @@ class ApiClient {
       ...options,
       headers,
     })
+
+    // 401 Unauthorized durumunda token'ı temizle
+    if (response.status === 401) {
+      AuthTokenManager.logout()
+      throw new Error("Şifreniz yanlış veya oturumunuz sona erdi. Lütfen tekrar giriş yapın.")
+    }
 
     if (!response.ok) {
       try {
@@ -628,6 +686,76 @@ class ApiClient {
     return this.request<{ message: string }>(`/admin/authors/${id}`, {
       method: "DELETE",
     })
+  }
+
+  // Authentication methods
+  async login(email: string, password: string): Promise<{ user: any; token: string; token_type: string; expires_in: number }> {
+    const response = await this.request<{ success: boolean; message: string; data: { user: any; token: string; token_type: string; expires_in: number } }>('/admin/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+    
+    if (response.success) {
+      AuthTokenManager.setToken(response.data.token)
+      AuthTokenManager.setUser(response.data.user)
+    }
+    
+    return response.data
+  }
+
+  async logout(): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await this.request<{ success: boolean; message: string }>('/admin/auth/logout', {
+        method: 'POST',
+      })
+      AuthTokenManager.logout()
+      return response
+    } catch (error) {
+      // Hata olsa bile local storage'ı temizle
+      AuthTokenManager.logout()
+      throw error
+    }
+  }
+
+  async getCurrentUser(): Promise<any> {
+    const response = await this.request<{ success: boolean; data: any }>('/admin/auth/me')
+    return response.data
+  }
+
+  async refreshToken(): Promise<{ token: string; token_type: string; expires_in: number }> {
+    const response = await this.request<{ success: boolean; message: string; data: { token: string; token_type: string; expires_in: number } }>('/admin/auth/refresh', {
+      method: 'POST',
+    })
+    
+    if (response.success) {
+      AuthTokenManager.setToken(response.data.token)
+    }
+    
+    return response.data
+  }
+
+  async changePassword(currentPassword: string, newPassword: string, newPasswordConfirmation: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>('/admin/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+        new_password_confirmation: newPasswordConfirmation,
+      }),
+    })
+  }
+
+  // Auth utility methods
+  isAuthenticated(): boolean {
+    return AuthTokenManager.isAuthenticated()
+  }
+
+  getStoredUser(): any {
+    return AuthTokenManager.getUser()
+  }
+
+  getStoredToken(): string | null {
+    return AuthTokenManager.getToken()
   }
 }
 

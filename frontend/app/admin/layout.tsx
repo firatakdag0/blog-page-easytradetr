@@ -40,7 +40,7 @@ import {
   User,
 } from "lucide-react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Suspense } from "react"
 import { apiClient } from "@/lib/api"
 
@@ -146,12 +146,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     trendingPosts: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
   const pathname = usePathname()
+  const router = useRouter()
 
-  // İstatistikleri yükle
+  // Authentication kontrolü ve veri yükleme
   useEffect(() => {
-    const fetchStats = async () => {
+    const checkAuthAndLoadData = async () => {
+      // Authentication kontrolü
+      if (!apiClient.isAuthenticated()) {
+        router.push('/admin/login')
+        return
+      }
+
       try {
+        // Kullanıcı bilgilerini al
+        const currentUser = await apiClient.getCurrentUser()
+        setUser(currentUser)
+
+        // İstatistikleri yükle
         const [posts, comments] = await Promise.all([
           apiClient.getAdminPosts({ per_page: 100 }),
           apiClient.getAllComments(),
@@ -173,14 +186,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           trendingPosts,
         })
       } catch (err) {
-        console.error("Stats fetch error:", err)
+        console.error("Auth or stats fetch error:", err)
+        // Authentication hatası varsa login sayfasına yönlendir
+        if (err instanceof Error && err.message.includes('Authentication')) {
+          router.push('/admin/login')
+        }
       } finally {
         setLoading(false)
       }
     }
 
-    fetchStats()
-  }, [])
+    checkAuthAndLoadData()
+  }, [router])
+
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout()
+      router.push('/admin/login')
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Hata olsa bile login sayfasına yönlendir
+      router.push('/admin/login')
+    }
+  }
 
   const isActive = (href: string) => {
     if (href === "/admin") {
@@ -193,6 +221,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
     return num.toString()
+  }
+
+  // Eğer giriş sayfasındaysak sadece children'ı döndür
+  if (pathname === "/admin/login") {
+    return <>{children}</>
   }
 
   return (
@@ -371,12 +404,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="p-6 border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-3 mb-4">
               <Avatar className="h-10 w-10">
-                <AvatarImage src="/placeholder.svg?height=40&width=40" />
-                <AvatarFallback>AY</AvatarFallback>
+                <AvatarImage src={user?.avatar || "/placeholder.svg?height=40&width=40"} />
+                <AvatarFallback>{user?.name?.substring(0, 2).toUpperCase() || "AY"}</AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Ahmet Yılmaz</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Admin</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{user?.name || "Admin"}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{user?.role || "Admin"}</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -387,8 +420,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </Link>
               </Button>
 
-              <Button variant="outline" size="sm">
-                <LogOut className="h-4 w-4" />
+              <Button variant="destructive" size="sm" className="flex-1" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Çıkış Yap
               </Button>
             </div>
           </div>
@@ -432,8 +466,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <ThemeToggle />
 
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                  <AvatarFallback>AY</AvatarFallback>
+                  <AvatarImage src={user?.avatar || "/placeholder.svg?height=32&width=32"} />
+                  <AvatarFallback>{user?.name?.substring(0, 2).toUpperCase() || "AY"}</AvatarFallback>
                 </Avatar>
               </div>
             </div>
