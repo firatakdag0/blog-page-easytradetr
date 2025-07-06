@@ -20,7 +20,7 @@ class PostController extends Controller
     public function adminIndex(Request $request): JsonResponse
     {
         $query = Post::selectForList()
-            ->with(['category:id,name,slug,color', 'author:id,name,avatar', 'tags:id,name,slug,color']);
+            ->with(['category:id,name,slug,color', 'author:id,name,email,avatar,bio', 'tags:id,name,slug,color']);
 
         // Kategori filtresi
         if ($request->has('category') && $request->category !== 'Tümü') {
@@ -82,46 +82,46 @@ class PostController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        // Cache key oluştur
-        $cacheKey = 'posts.index.' . md5(serialize($request->all()));
+        // Cache'i geçici olarak devre dışı bırak
+        // $cacheKey = 'posts.index.' . md5(serialize($request->all()));
+        // return Cache::remember($cacheKey, 1800, function () use ($request) {
 
-        return Cache::remember($cacheKey, 1800, function () use ($request) {
-            $query = Post::selectForList()
-                ->with(['category:id,name,slug,color', 'author:id,name,avatar', 'tags:id,name,slug,color'])
-                ->published()
-                ->orderBy('published_at', 'desc');
+        $query = Post::selectForList()
+            ->with(['category:id,name,slug,color', 'author:id,name,email,avatar,bio', 'tags:id,name,slug,color'])
+            ->published()
+            ->orderBy('published_at', 'desc');
 
-            // Kategori filtresi
-            if ($request->has('category')) {
-                $query->byCategory($request->category);
-            }
+        // Kategori filtresi
+        if ($request->has('category')) {
+            $query->byCategory($request->category);
+        }
 
-            // Arama filtresi
-            if ($request->has('search')) {
-                $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('title', 'like', "%{$search}%")
-                      ->orWhere('excerpt', 'like', "%{$search}%");
-                });
-            }
+        // Arama filtresi
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('excerpt', 'like', "%{$search}%");
+            });
+        }
 
-            // Öne çıkan yazılar
-            if ($request->has('featured') && $request->featured) {
-                $query->featured();
-            }
+        // Öne çıkan yazılar
+        if ($request->has('featured') && $request->featured) {
+            $query->featured();
+        }
 
-            // Trend yazılar
-            if ($request->has('trending') && $request->trending) {
-                $query->trending();
-            }
+        // Trend yazılar
+        if ($request->has('trending') && $request->trending) {
+            $query->trending();
+        }
 
-            $posts = $query->paginate($request->get('per_page', 12));
+        $posts = $query->paginate($request->get('per_page', 12));
 
-            return response()->json([
-                'success' => true,
-                'data' => $posts
-            ]);
-        });
+        return response()->json([
+            'success' => true,
+            'data' => $posts
+        ]);
+        // });
     }
 
     /**

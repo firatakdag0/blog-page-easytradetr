@@ -86,6 +86,7 @@ export default function PostsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [showFilters, setShowFilters] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Kategorileri yükle
   useEffect(() => {
@@ -132,7 +133,7 @@ export default function PostsPage() {
       }
     }
     fetchPosts()
-  }, [searchQuery, selectedCategory, selectedStatus, sortBy, sortOrder, currentPage, itemsPerPage])
+  }, [searchQuery, selectedCategory, selectedStatus, sortBy, sortOrder, currentPage, itemsPerPage, refreshKey])
 
   // İstatistikleri hesapla
   const stats = {
@@ -281,6 +282,7 @@ export default function PostsPage() {
     setSelectedStatus("Tümü")
     setSortBy("created_at")
     setSortOrder("desc")
+    setRefreshKey((k) => k + 1)
   }
 
   const copyToClipboard = async (text: string) => {

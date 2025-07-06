@@ -104,7 +104,7 @@ class Post extends Model
     {
         return $query->select([
             'id', 'title', 'slug', 'excerpt', 'featured_image',
-            'category_id', 'author_id', 'published_at', 'read_time',
+            'category_id', 'author_id', 'status', 'published_at', 'read_time',
             'views_count', 'likes_count', 'comments_count',
             'is_featured', 'is_trending', 'created_at'
         ]);

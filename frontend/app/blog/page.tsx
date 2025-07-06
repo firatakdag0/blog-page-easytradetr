@@ -251,7 +251,7 @@ const ProfessionalHeroText = () => {
 export default function BlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [selectedCategory, setSelectedCategory] = useState("")
   const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
@@ -277,35 +277,20 @@ export default function BlogPage() {
 
         // Fetch categories
         const categoriesRes = await apiClient.getCategories()
-        // Add "All" category
-        const allCategories = [
-          {
-            id: 0,
-            name: "Tümü",
-            slug: "all",
-            description: "",
-            color: "#64748b",
-            posts_count: 0,
-            created_at: "",
-            updated_at: "",
-          },
-          ...categoriesRes
-        ]
-        setCategories(allCategories)
+        setCategories(categoriesRes)
 
         // Fetch posts with pagination
         const postsRes = await apiClient.getPosts({
           page: currentPage,
           per_page: POSTS_PER_PAGE,
-          category: selectedCategory === "all" ? undefined : selectedCategory,
+          category: selectedCategory || undefined,
           search: searchQuery,
         })
-        let postsArray: BlogPost[] = [];
-        if (postsRes && Array.isArray((postsRes as any).data)) {
-          postsArray = (postsRes as any).data;
-        } else if (postsRes && (postsRes as any).data && Array.isArray((postsRes as any).data.data)) {
-          postsArray = (postsRes as any).data.data;
-        }
+        
+        // API'den gelen veri yapısını doğru şekilde işle
+        // postsRes artık PaginatedResponse<BlogPost> tipinde
+        const postsArray = postsRes.data;
+        
         setPosts(postsArray)
       } catch (err) {
         setError("Blog yazıları yüklenirken bir hata oluştu.")
@@ -318,9 +303,56 @@ export default function BlogPage() {
     fetchData()
   }, [currentPage, selectedCategory, searchQuery, activeFilter])
 
+  // Otomatik polling ile veri yenileme
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    let isTabActive = true;
+
+    const handleVisibility = () => {
+      isTabActive = !document.hidden;
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    if (!searchQuery) {
+      interval = setInterval(() => {
+        if (isTabActive) {
+          // Sadece arama yoksa ve tab aktifse veri çek
+          // fetchData fonksiyonunu tekrar tanımla
+          (async () => {
+            try {
+              setLoading(true)
+              setError(null)
+              // Fetch categories
+              const categoriesRes = await apiClient.getCategories()
+              setCategories(categoriesRes)
+              // Fetch posts with pagination
+              const postsRes = await apiClient.getPosts({
+                page: currentPage,
+                per_page: POSTS_PER_PAGE,
+                category: selectedCategory || undefined,
+                search: searchQuery,
+              })
+              const postsArray = postsRes.data;
+              setPosts(postsArray)
+            } catch (err) {
+              setError("Blog yazıları yüklenirken bir hata oluştu.")
+              console.error(err)
+            } finally {
+              setLoading(false)
+            }
+          })();
+        }
+      }, 20000) // 20 saniye
+    }
+    return () => {
+      if (interval) clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [currentPage, selectedCategory, searchQuery, activeFilter])
+
   const getFilteredPosts = () => {
     let filtered = posts.filter((post) => {
-      const matchesCategory = selectedCategory === "all" || post.category.slug === selectedCategory
+      const matchesCategory = !selectedCategory || post.category.slug === selectedCategory
       const matchesSearch =
         post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         post.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -470,7 +502,7 @@ export default function BlogPage() {
           <ScrollReveal delay={0.3}>
             <div className="flex items-center gap-4 mb-6">
               <h3 className="text-xl font-bold text-foreground">
-                {selectedCategory === "all" ? "Tüm Yazılar" : categories.find((c) => c.slug === selectedCategory)?.name}
+                {!selectedCategory ? "Tüm Yazılar" : categories.find((c) => c.slug === selectedCategory)?.name}
               </h3>
               <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full">
                 {filteredPosts.length} yazı
@@ -478,7 +510,7 @@ export default function BlogPage() {
             </div>
           </ScrollReveal>
           {/* Featured Posts - 2 büyük kart */}
-          {selectedCategory === "all" && activeFilter === "all" && featuredPosts.length > 0 && (
+          {!selectedCategory && activeFilter === "all" && featuredPosts.length > 0 && (
             <ScrollReveal delay={0.4}>
               <section className="mb-6">
                 <div className="flex items-center gap-2 mb-6">
@@ -598,7 +630,7 @@ export default function BlogPage() {
                   <p className="text-lg text-muted-foreground mb-6">{error}</p>
                   <Button
                     onClick={() => {
-                      setSelectedCategory("all")
+                      setSelectedCategory("")
                       setActiveFilter("all")
                       setSearchQuery("")
                     }}
@@ -616,7 +648,7 @@ export default function BlogPage() {
                   <p className="text-lg text-muted-foreground mb-6">Arama kriterlerinizi değiştirmeyi deneyin.</p>
                   <Button
                     onClick={() => {
-                      setSelectedCategory("all")
+                      setSelectedCategory("")
                       setActiveFilter("all")
                       setSearchQuery("")
                     }}
@@ -763,13 +795,13 @@ export default function BlogPage() {
                   <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
                     İşletmenizi büyütecek en güncel bilgileri ve Easytrade'den haberları e-posta adresinize gönderelim.
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-4 max-w-lg mx-auto">
+                  <div className="flex flex-col sm:flex-row gap-4 max-w-lg mx-auto items-center justify-center">
                     <input
                       type="email"
                       placeholder="E-posta adresiniz"
-                      className="flex-1 px-6 py-4 rounded-2xl border border-input bg-background text-foreground text-lg"
+                      className="flex-1 px-6 py-4 rounded-2xl border border-input bg-background text-foreground text-lg focus:outline-none focus:ring-2 focus:ring-[hsl(135,100%,50%)] focus:border-transparent transition-all duration-200"
                     />
-                    <Button className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black whitespace-nowrap px-8 py-4 text-lg font-semibold rounded-2xl">
+                    <Button className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black whitespace-nowrap px-8 py-4 text-lg font-semibold rounded-2xl transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-xl">
                       Abone Ol
                     </Button>
                   </div>

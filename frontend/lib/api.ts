@@ -339,14 +339,16 @@ class ApiClient {
     if (params?.trending) searchParams.append("trending", "1")
 
     const query = searchParams.toString()
-    const cacheKey = `posts:${query}`
-    const cached = apiCache.get(cacheKey)
-    if (cached) return cached
     
-    const result = await this.request<PaginatedResponse<BlogPost>>(`/posts${query ? `?${query}` : ""}`)
-    apiCache.set(cacheKey, result, 300000) // 5 minutes cache
+    // Cache'i geçici olarak devre dışı bırak
+    // const cacheKey = `posts:${query}`
+    // const cached = apiCache.get(cacheKey)
+    // if (cached) return cached
     
-    return result
+    const response = await this.request<{ success: boolean; data: PaginatedResponse<BlogPost> }>(`/posts${query ? `?${query}` : ""}`)
+    // apiCache.set(cacheKey, response.data, 300000) // 5 minutes cache
+    
+    return response.data
   }
 
   async getAdminPosts(params?: {
