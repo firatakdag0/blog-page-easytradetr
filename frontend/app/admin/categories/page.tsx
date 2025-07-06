@@ -1,13 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -35,211 +36,130 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Plus, Edit, Trash2, MoreHorizontal, FileText, Search } from "lucide-react"
-import { toast } from "sonner"
-
-// Mock data - bu gerçek uygulamada state management ile yönetilecek
-const initialCategories = [
-  {
-    id: 1,
-    name: "Ön Muhasebe",
-    slug: "on-muhasebe",
-    description: "Ön muhasebe sistemleri ve uygulamaları hakkında yazılar",
-    color: "#3b82f6",
-    postsCount: 8,
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 2,
-    name: "Barkod Sistemi",
-    slug: "barkod-sistemi",
-    description: "Barkod teknolojileri ve stok yönetimi çözümleri",
-    color: "#10b981",
-    postsCount: 6,
-    createdAt: "2024-01-02",
-  },
-  {
-    id: 3,
-    name: "Satış Noktası",
-    slug: "satis-noktasi",
-    description: "POS sistemleri ve satış yönetimi",
-    color: "#f59e0b",
-    postsCount: 5,
-    createdAt: "2024-01-03",
-  },
-  {
-    id: 4,
-    name: "Bulut Teknoloji",
-    slug: "bulut-teknoloji",
-    description: "Bulut tabanlı çözümler ve dijital dönüşüm",
-    color: "#8b5cf6",
-    postsCount: 4,
-    createdAt: "2024-01-04",
-  },
-  {
-    id: 5,
-    name: "Perakende",
-    slug: "perakende",
-    description: "Perakende sektörü ve müşteri deneyimi",
-    color: "#ef4444",
-    postsCount: 3,
-    createdAt: "2024-01-05",
-  },
-  {
-    id: 6,
-    name: "Başarı Hikayeleri",
-    slug: "basari-hikayeleri",
-    description: "Müşteri başarı hikayeleri ve vaka çalışmaları",
-    color: "#06b6d4",
-    postsCount: 2,
-    createdAt: "2024-01-06",
-  },
-]
-
-const colorOptions = [
-  "#3b82f6",
-  "#10b981",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ef4444",
-  "#06b6d4",
-  "#84cc16",
-  "#f97316",
-  "#ec4899",
-  "#6366f1",
-  "#14b8a6",
-  "#f43f5e",
-]
+import {
+  FolderOpen,
+  Plus,
+  Search,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  FileText,
+  Calendar,
+  Palette,
+} from "lucide-react"
+import { apiClient, Category } from "@/lib/api"
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState(initialCategories)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingCategory, setEditingCategory] = useState<any>(null)
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [formData, setFormData] = useState({
+    name: "",
+    slug: "",
+    description: "",
+    color: "#3B82F6",
+  })
 
-  // Form states
-  const [name, setName] = useState("")
-  const [slug, setSlug] = useState("")
-  const [description, setDescription] = useState("")
-  const [color, setColor] = useState(colorOptions[0])
+  useEffect(() => {
+    fetchCategories()
+  }, [])
 
-  const filteredCategories = categories.filter(
-    (category) =>
-      category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      category.description.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
-
-  const generateSlug = (name: string) => {
-    return name
-      .toLowerCase()
-      .replace(/ğ/g, "g")
-      .replace(/ü/g, "u")
-      .replace(/ş/g, "s")
-      .replace(/ı/g, "i")
-      .replace(/ö/g, "o")
-      .replace(/ç/g, "c")
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .trim()
-  }
-
-  const handleNameChange = (value: string) => {
-    setName(value)
-    if (!editingCategory) {
-      setSlug(generateSlug(value))
+  const fetchCategories = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiClient.getCategories()
+      setCategories(res)
+    } catch (err: any) {
+      console.error("Kategori yükleme hatası:", err)
+      setError("Kategoriler yüklenemedi.")
+    } finally {
+      setLoading(false)
     }
   }
 
-  const resetForm = () => {
-    setName("")
-    setSlug("")
-    setDescription("")
-    setColor(colorOptions[0])
-    setEditingCategory(null)
+  const handleCreateCategory = async () => {
+    try {
+      const newCategory = await apiClient.createCategory(formData)
+      setCategories([...categories, newCategory])
+      setIsCreateDialogOpen(false)
+      resetForm()
+      toast.success("Kategori başarıyla oluşturuldu!", {
+        description: `${formData.name} kategorisi eklendi.`
+      })
+    } catch (err: any) {
+      setError("Kategori oluşturulamadı.")
+      toast.error("Kategori oluşturulamadı", {
+        description: "Bir hata oluştu. Lütfen tekrar deneyin."
+      })
+    }
   }
 
-  const handleCreate = () => {
-    if (!name.trim()) {
-      toast.error("Kategori adı gereklidir!")
-      return
+  const handleUpdateCategory = async () => {
+    if (!editingCategory) return
+    try {
+      const updatedCategory = await apiClient.updateCategory(editingCategory.id, formData)
+      setCategories(categories.map(cat => cat.id === editingCategory.id ? updatedCategory : cat))
+      setIsEditDialogOpen(false)
+      setEditingCategory(null)
+      resetForm()
+      toast.success("Kategori başarıyla güncellendi!", {
+        description: `${formData.name} kategorisi güncellendi.`
+      })
+    } catch (err: any) {
+      setError("Kategori güncellenemedi.")
+      toast.error("Kategori güncellenemedi", {
+        description: "Bir hata oluştu. Lütfen tekrar deneyin."
+      })
     }
-
-    // Slug kontrolü
-    const slugExists = categories.some((cat) => cat.slug === slug)
-    if (slugExists) {
-      toast.error("Bu URL slug zaten kullanılıyor!")
-      return
-    }
-
-    const newCategory = {
-      id: Math.max(...categories.map((c) => c.id)) + 1,
-      name: name.trim(),
-      slug: slug.trim(),
-      description: description.trim(),
-      color,
-      postsCount: 0,
-      createdAt: new Date().toISOString().split("T")[0],
-    }
-
-    setCategories([...categories, newCategory])
-    toast.success("Kategori başarıyla oluşturuldu!")
-    resetForm()
-    setIsCreateDialogOpen(false)
   }
 
-  const handleEdit = (category: any) => {
+  const handleDeleteCategory = async (categoryId: number) => {
+    try {
+      await apiClient.deleteCategory(categoryId)
+      const deletedCategory = categories.find(cat => cat.id === categoryId)
+      setCategories(categories.filter(cat => cat.id !== categoryId))
+      toast.success("Kategori başarıyla silindi!", {
+        description: `${deletedCategory?.name} kategorisi silindi.`
+      })
+    } catch (err: any) {
+      console.error("Kategori silme hatası:", err)
+      const errorMessage = err.message || "Kategori silinemedi."
+      setError(errorMessage)
+      toast.error("Kategori silinemedi", {
+        description: errorMessage
+      })
+    }
+  }
+
+  const openEditDialog = (category: Category) => {
     setEditingCategory(category)
-    setName(category.name)
-    setSlug(category.slug)
-    setDescription(category.description)
-    setColor(category.color)
+    setFormData({
+      name: category.name,
+      slug: category.slug,
+      description: category.description,
+      color: category.color,
+    })
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdate = () => {
-    if (!name.trim()) {
-      toast.error("Kategori adı gereklidir!")
-      return
-    }
-
-    // Slug kontrolü (kendi kategorisi hariç)
-    const slugExists = categories.some((cat) => cat.slug === slug && cat.id !== editingCategory.id)
-    if (slugExists) {
-      toast.error("Bu URL slug zaten kullanılıyor!")
-      return
-    }
-
-    const updatedCategories = categories.map((cat) =>
-      cat.id === editingCategory.id
-        ? {
-            ...cat,
-            name: name.trim(),
-            slug: slug.trim(),
-            description: description.trim(),
-            color,
-          }
-        : cat,
-    )
-
-    setCategories(updatedCategories)
-    toast.success("Kategori başarıyla güncellendi!")
-    resetForm()
-    setIsEditDialogOpen(false)
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      slug: "",
+      description: "",
+      color: "#3B82F6",
+    })
   }
 
-  const handleDelete = (categoryId: number) => {
-    const categoryToDelete = categories.find((cat) => cat.id === categoryId)
-
-    if (categoryToDelete && categoryToDelete.postsCount > 0) {
-      toast.error("Bu kategoride yazılar bulunuyor! Önce yazıları başka kategoriye taşıyın.")
-      return
-    }
-
-    setCategories(categories.filter((cat) => cat.id !== categoryId))
-    toast.success("Kategori başarıyla silindi!")
-  }
+  const filteredCategories = categories.filter(category =>
+    (category.name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (category.description?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+  )
 
   return (
     <div className="space-y-6">
@@ -247,7 +167,7 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Kategori Yönetimi</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Blog kategorilerini oluşturun, düzenleyin ve yönetin.</p>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">Blog kategorilerinizi oluşturun, düzenleyin ve yönetin.</p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
@@ -259,62 +179,61 @@ export default function CategoriesPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Yeni Kategori Oluştur</DialogTitle>
-              <DialogDescription>Blog için yeni bir kategori oluşturun.</DialogDescription>
+              <DialogDescription>
+                Blog için yeni bir kategori oluşturun.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="name">Kategori Adı *</Label>
+                <Label htmlFor="name">Kategori Adı</Label>
                 <Input
                   id="name"
-                  value={name}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="Kategori adını girin..."
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Kategori adını girin"
                 />
               </div>
               <div>
-                <Label htmlFor="slug">URL Slug</Label>
-                <Input id="slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="url-slug" />
-                <p className="text-xs text-gray-500 mt-1">URL'de görünecek kısım (örn: /kategori/url-slug)</p>
+                <Label htmlFor="slug">Slug</Label>
+                <Input
+                  id="slug"
+                  value={formData.slug}
+                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                  placeholder="kategori-adi"
+                />
               </div>
               <div>
                 <Label htmlFor="description">Açıklama</Label>
                 <Textarea
                   id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Kategori açıklaması..."
-                  rows={3}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Kategori açıklaması"
                 />
               </div>
               <div>
-                <Label>Renk</Label>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {colorOptions.map((colorOption) => (
-                    <button
-                      key={colorOption}
-                      onClick={() => setColor(colorOption)}
-                      className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
-                        color === colorOption ? "border-gray-900 dark:border-white scale-110" : "border-gray-300"
-                      }`}
-                      style={{ backgroundColor: colorOption }}
-                    />
-                  ))}
+                <Label htmlFor="color">Renk</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="color"
+                    type="color"
+                    value={formData.color}
+                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                    className="w-16 h-10"
+                  />
+                  <Input
+                    value={formData.color}
+                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                    placeholder="#3B82F6"
+                  />
                 </div>
               </div>
             </div>
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  resetForm()
-                  setIsCreateDialogOpen(false)
-                }}
-              >
+              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                 İptal
               </Button>
-              <Button onClick={handleCreate} className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black">
-                Oluştur
-              </Button>
+              <Button onClick={handleCreateCategory}>Oluştur</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -337,177 +256,181 @@ export default function CategoriesPage() {
 
       {/* Categories Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCategories.map((category, index) => (
-          <motion.div
-            key={category.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
-          >
-            <Card className="hover:shadow-lg transition-shadow duration-300">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: category.color }} />
-                    <CardTitle className="text-lg">{category.name}</CardTitle>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEdit(category)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Düzenle
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Sil
-                          </DropdownMenuItem>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Kategoriyi silmek istediğinizden emin misiniz?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Bu işlem geri alınamaz.{" "}
-                              {category.postsCount > 0 && `Bu kategoride ${category.postsCount} yazı bulunuyor.`}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>İptal</AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-red-600 hover:bg-red-700"
-                              onClick={() => handleDelete(category.id)}
-                            >
-                              Sil
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">{category.description}</p>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                    <FileText className="h-4 w-4" />
-                    <span>{category.postsCount} yazı</span>
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    /{category.slug}
-                  </Badge>
+        {loading ? (
+          Array.from({ length: 6 }).map((_, index) => (
+            <Card key={index} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="space-y-3">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-full"></div>
+                  <div className="h-3 bg-gray-200 rounded w-2/3"></div>
                 </div>
               </CardContent>
             </Card>
-          </motion.div>
-        ))}
+          ))
+        ) : error ? (
+          <div className="col-span-full text-center text-red-500 dark:text-red-400">
+            {error}
+          </div>
+        ) : filteredCategories.length === 0 ? (
+          <div className="col-span-full text-center text-gray-500 dark:text-gray-400">
+            Kategori bulunamadı.
+          </div>
+        ) : (
+          filteredCategories.map((category, index) => (
+            <motion.div
+              key={category.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.05 }}
+            >
+              <Card className="hover:shadow-lg transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-4 h-4 rounded-full"
+                        style={{ backgroundColor: category.color }}
+                      ></div>
+                      <h3 className="font-semibold text-gray-900 dark:text-white">
+                        {category.name}
+                      </h3>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEditDialog(category)}>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Düzenle
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Sil
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Kategoriyi silmek istediğinizden emin misiniz?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {category.posts_count > 0 ? (
+                                  <span className="text-red-600 font-medium">
+                                    Bu kategoriye ait {category.posts_count} yazı bulunmaktadır. 
+                                    Kategoriyi silmek için önce bu yazıları başka bir kategoriye taşıyın veya silin.
+                                  </span>
+                                ) : (
+                                  "Bu işlem geri alınamaz. Kategori kalıcı olarak silinecektir."
+                                )}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>İptal</AlertDialogCancel>
+                              <AlertDialogAction 
+                                className="bg-red-600 hover:bg-red-700"
+                                onClick={() => handleDeleteCategory(category.id)}
+                                disabled={category.posts_count > 0}
+                              >
+                                {category.posts_count > 0 ? "Yazılar Var" : "Sil"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
+                    {category.description}
+                  </p>
+                  
+                  <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-1">
+                      <FileText className="h-4 w-4" />
+                      <span className={category.posts_count > 0 ? "text-orange-600 font-medium" : "text-gray-500"}>
+                        {category.posts_count} yazı
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-4 w-4" />
+                      <span>{new Date(category.created_at).toLocaleDateString("tr-TR")}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))
+        )}
       </div>
 
       {/* Edit Dialog */}
-      <Dialog
-        open={isEditDialogOpen}
-        onOpenChange={(open) => {
-          setIsEditDialogOpen(open)
-          if (!open) resetForm()
-        }}
-      >
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Kategoriyi Düzenle</DialogTitle>
-            <DialogDescription>Kategori bilgilerini güncelleyin.</DialogDescription>
+            <DialogTitle>Kategori Düzenle</DialogTitle>
+            <DialogDescription>
+              Kategori bilgilerini güncelleyin.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="edit-name">Kategori Adı *</Label>
+              <Label htmlFor="edit-name">Kategori Adı</Label>
               <Input
                 id="edit-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Kategori adını girin..."
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Kategori adını girin"
               />
             </div>
             <div>
-              <Label htmlFor="edit-slug">URL Slug</Label>
-              <Input id="edit-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="url-slug" />
-              <p className="text-xs text-gray-500 mt-1">URL'de görünecek kısım (örn: /kategori/url-slug)</p>
+              <Label htmlFor="edit-slug">Slug</Label>
+              <Input
+                id="edit-slug"
+                value={formData.slug}
+                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                placeholder="kategori-adi"
+              />
             </div>
             <div>
               <Label htmlFor="edit-description">Açıklama</Label>
               <Textarea
                 id="edit-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Kategori açıklaması..."
-                rows={3}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Kategori açıklaması"
               />
             </div>
             <div>
-              <Label>Renk</Label>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {colorOptions.map((colorOption) => (
-                  <button
-                    key={colorOption}
-                    onClick={() => setColor(colorOption)}
-                    className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
-                      color === colorOption ? "border-gray-900 dark:border-white scale-110" : "border-gray-300"
-                    }`}
-                    style={{ backgroundColor: colorOption }}
-                  />
-                ))}
+              <Label htmlFor="edit-color">Renk</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="edit-color"
+                  type="color"
+                  value={formData.color}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  className="w-16 h-10"
+                />
+                <Input
+                  value={formData.color}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  placeholder="#3B82F6"
+                />
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                resetForm()
-                setIsEditDialogOpen(false)
-              }}
-            >
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               İptal
             </Button>
-            <Button onClick={handleUpdate} className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black">
-              Güncelle
-            </Button>
+            <Button onClick={handleUpdateCategory}>Güncelle</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Empty State */}
-      {filteredCategories.length === 0 && (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <div className="text-gray-400 mb-4">
-              <FileText className="h-12 w-12 mx-auto" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              {searchQuery ? "Kategori bulunamadı" : "Henüz kategori yok"}
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              {searchQuery
-                ? "Arama kriterlerinize uygun kategori bulunamadı."
-                : "İlk kategorinizi oluşturmak için yukarıdaki butonu kullanın."}
-            </p>
-            {!searchQuery && (
-              <Button
-                onClick={() => setIsCreateDialogOpen(true)}
-                className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                İlk Kategorinizi Oluşturun
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

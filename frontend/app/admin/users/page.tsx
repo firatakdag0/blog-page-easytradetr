@@ -425,122 +425,126 @@ export default function UsersPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredUsers.map((user, index) => (
-                  <motion.tr
-                    key={user.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={selectedUsers.includes(user.id)}
-                        onChange={() => toggleUserSelection(user.id)}
-                        className="rounded border-gray-300"
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                          <AvatarFallback>
-                            {user.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h4 className="font-medium text-gray-900 dark:text-white">{user.name}</h4>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">{user.email}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500">{user.location}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="space-y-1">
-                        {getRoleBadge(user.role)}
-                        {getStatusBadge(user.status, user.isBanned)}
-                        {user.stats.reports > 0 && (
-                          <Badge variant="destructive" className="text-xs">
-                            <Flag className="h-3 w-3 mr-1" />
-                            {user.stats.reports} şikayet
-                          </Badge>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
-                          <Calendar className="h-4 w-4" />
-                          <span>Katılım: {formatDate(user.joinDate)}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
-                          <Activity className="h-4 w-4" />
-                          <span>Son: {formatLastActive(user.lastActive)}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                        <div className="flex items-center gap-1">
-                          <MessageSquare className="h-4 w-4" />
-                          <span>{user.stats.comments}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Heart className="h-4 w-4" />
-                          <span>{user.stats.likes}</span>
-                        </div>
-                        {user.stats.posts > 0 && (
-                          <div className="flex items-center gap-1">
-                            <Eye className="h-4 w-4" />
-                            <span>{user.stats.posts}</span>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setUserDetailDialog(user)}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Detayları Görüntüle
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Mail className="h-4 w-4 mr-2" />
-                            Mesaj Gönder
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          {user.isBanned ? (
-                            <DropdownMenuItem onClick={() => handleUnbanUser(user.id)}>
-                              <UserCheck className="h-4 w-4 mr-2" />
-                              Banı Kaldır
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem onClick={() => handleBanUser(user)}>
-                              <Ban className="h-4 w-4 mr-2" />
-                              Banla
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem>
-                            <Shield className="h-4 w-4 mr-2" />
-                            Rol Değiştir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
             </table>
+            <div className="max-h-96 overflow-y-auto">
+              <table className="w-full">
+                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredUsers.map((user, index) => (
+                    <motion.tr
+                      key={user.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.includes(user.id)}
+                          onChange={() => toggleUserSelection(user.id)}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={user.avatar || "/placeholder.svg"} />
+                            <AvatarFallback>
+                              {user.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <h4 className="font-medium text-gray-900 dark:text-white">{user.name}</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{user.email}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-500">{user.location}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="space-y-1">
+                          {getRoleBadge(user.role)}
+                          {getStatusBadge(user.status, user.isBanned)}
+                          {user.stats.reports > 0 && (
+                            <Badge variant="destructive" className="text-xs">
+                              <Flag className="h-3 w-3 mr-1" />
+                              {user.stats.reports} şikayet
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                            <Calendar className="h-4 w-4" />
+                            <span>Katılım: {formatDate(user.joinDate)}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                            <Activity className="h-4 w-4" />
+                            <span>Son: {formatLastActive(user.lastActive)}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                          <div className="flex items-center gap-1">
+                            <MessageSquare className="h-4 w-4" />
+                            <span>{user.stats.comments}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Heart className="h-4 w-4" />
+                            <span>{user.stats.likes}</span>
+                          </div>
+                          {user.stats.posts > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Eye className="h-4 w-4" />
+                              <span>{user.stats.posts}</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setUserDetailDialog(user)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Detayları Görüntüle
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Mail className="h-4 w-4 mr-2" />
+                              Mesaj Gönder
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {user.isBanned ? (
+                              <DropdownMenuItem onClick={() => handleUnbanUser(user.id)}>
+                                <UserCheck className="h-4 w-4 mr-2" />
+                                Banı Kaldır
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleBanUser(user)}>
+                                <Ban className="h-4 w-4 mr-2" />
+                                Banla
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem>
+                              <Shield className="h-4 w-4 mr-2" />
+                              Rol Değiştir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </CardContent>
       </Card>

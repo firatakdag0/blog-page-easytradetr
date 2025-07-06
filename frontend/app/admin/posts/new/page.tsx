@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +12,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   Save,
   Eye,
@@ -23,19 +34,14 @@ import {
   Settings,
   Star,
   TrendingUp,
+  Search,
+  Grid3X3,
+  List,
+  Loader2,
+  Check,
 } from "lucide-react"
 import Link from "next/link"
-
-const categories = [
-  "Ön Muhasebe",
-  "Barkod Sistemi",
-  "Satış Noktası",
-  "Bulut Teknoloji",
-  "Perakende",
-  "Başarı Hikayeleri",
-]
-
-const authors = ["Ahmet Yılmaz", "Zeynep Kaya", "Mehmet Demir", "Ayşe Özkan"]
+import { apiClient, Category, MediaFile, formatDateTimeForAPI, Author, getImageUrl } from "@/lib/api"
 
 export default function NewPostPage() {
   const [title, setTitle] = useState("")
@@ -44,7 +50,7 @@ export default function NewPostPage() {
   const [content, setContent] = useState("")
   const [category, setCategory] = useState("")
   const [author, setAuthor] = useState("")
-  const [tags, setTags] = useState<string[]>([])
+  const [tags, setTags] = useState<{ id: number; name: string }[]>([])
   const [newTag, setNewTag] = useState("")
   const [featuredImage, setFeaturedImage] = useState("")
   const [isFeatured, setIsFeatured] = useState(false)
@@ -54,6 +60,65 @@ export default function NewPostPage() {
   const [readTime, setReadTime] = useState(5)
   const [metaTitle, setMetaTitle] = useState("")
   const [metaDescription, setMetaDescription] = useState("")
+  const router = useRouter()
+  const [categories, setCategories] = useState<Category[]>([])
+  const [authors, setAuthors] = useState<Author[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Medya seçici için state'ler
+  const [isMediaSelectorOpen, setIsMediaSelectorOpen] = useState(false)
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
+  const [mediaLoading, setMediaLoading] = useState(false)
+  const [mediaSearchQuery, setMediaSearchQuery] = useState("")
+  const [mediaViewMode, setMediaViewMode] = useState<"grid" | "list">("grid")
+  const [selectedMedia, setSelectedMedia] = useState<MediaFile | null>(null)
+
+  useEffect(() => {
+    // Kategorileri çek
+    apiClient.getCategories().then(setCategories)
+    // Yazarları çek
+    apiClient.getAuthors().then((response) => {
+      const authorsArray = (response as any)?.data || []
+      setAuthors(authorsArray)
+    })
+  }, [])
+
+  // Medya dosyalarını yükle
+  const fetchMediaFiles = async () => {
+    setMediaLoading(true)
+    try {
+      const response = await apiClient.getMedia({
+        search: mediaSearchQuery,
+        type: "image",
+        per_page: 50
+      })
+      setMediaFiles(response.data)
+    } catch (err: any) {
+      console.error("Media fetch error:", err)
+      toast.error("Medya dosyaları yüklenemedi")
+    } finally {
+      setMediaLoading(false)
+    }
+  }
+
+  // Medya seçici açıldığında dosyaları yükle
+  useEffect(() => {
+    if (isMediaSelectorOpen) {
+      fetchMediaFiles()
+    }
+  }, [isMediaSelectorOpen])
+
+  // Arama değiştiğinde medya dosyalarını yeniden yükle
+  useEffect(() => {
+    if (isMediaSelectorOpen) {
+      const timeoutId = setTimeout(() => {
+        fetchMediaFiles()
+      }, 500)
+
+      return () => clearTimeout(timeoutId)
+    }
+  }, [mediaSearchQuery, isMediaSelectorOpen])
 
   // Auto-generate slug from title
   const generateSlug = (title: string) => {
@@ -73,37 +138,84 @@ export default function NewPostPage() {
   }
 
   const addTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()])
+    if (newTag.trim() && !tags.some((tag) => tag.name === newTag.trim())) {
+      setTags([...tags, { id: tags.length + 1, name: newTag.trim() }])
       setNewTag("")
     }
   }
 
   const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter((tag) => tag !== tagToRemove))
+    setTags(tags.filter((tag) => tag.name !== tagToRemove))
   }
 
-  const handleSave = (saveStatus: string) => {
-    const postData = {
-      title,
-      slug,
-      excerpt,
-      content,
-      category,
-      author,
-      tags,
-      featuredImage,
-      isFeatured,
-      isTrending,
-      status: saveStatus,
-      publishDate,
-      readTime,
-      metaTitle,
-      metaDescription,
-    }
+  // Medya seçme işlemi
+  const handleSelectMedia = (media: MediaFile) => {
+    setSelectedMedia(media)
+    setFeaturedImage(media.url)
+    setIsMediaSelectorOpen(false)
+    toast.success("Görsel seçildi!", {
+      description: media.name
+    })
+  }
 
-    console.log("Saving post:", postData)
-    // Implement save logic here
+  const handleSave = async (saveStatus: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const selectedCategory = categories.find((c) => c.id.toString() === category)
+      const selectedAuthor = authors.find((a) => a.id.toString() === author)
+      
+      if (!selectedCategory) {
+        setError("Lütfen bir kategori seçin.")
+        toast.error("Kategori seçilmedi", {
+          description: "Lütfen bir kategori seçin."
+        })
+        setLoading(false)
+        return
+      }
+      
+      if (!selectedAuthor) {
+        setError("Lütfen bir yazar seçin.")
+        toast.error("Yazar seçilmedi", {
+          description: "Lütfen bir yazar seçin."
+        })
+        setLoading(false)
+        return
+      }
+      
+      const postData = {
+        title,
+        slug,
+        excerpt,
+        content,
+        category_id: selectedCategory.id,
+        author_id: selectedAuthor.id,
+        tags: tags.map((tag) => tag.name),
+        featured_image: featuredImage,
+        is_featured: isFeatured,
+        is_trending: isTrending,
+        status: saveStatus,
+        published_at: publishDate ? formatDateTimeForAPI(publishDate) : null,
+        read_time: readTime,
+        meta_title: metaTitle,
+        meta_description: metaDescription,
+      }
+      await apiClient.createPost(postData)
+      
+      const statusText = saveStatus === "published" ? "yayınlandı" : "taslak olarak kaydedildi"
+      toast.success("İçerik başarıyla oluşturuldu!", {
+        description: `${title} ${statusText}.`
+      })
+      
+      router.push("/admin/posts")
+    } catch (err: any) {
+      setError("İçerik kaydedilemedi.")
+      toast.error("İçerik kaydedilemedi", {
+        description: "Bir hata oluştu. Lütfen tekrar deneyin."
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -127,10 +239,10 @@ export default function NewPostPage() {
           </Button>
           <Button
             className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black"
-            onClick={() => handleSave("published")}
+            onClick={() => handleSave(status)}
           >
-            <Eye className="h-4 w-4 mr-2" />
-            Yayınla
+            <Save className="h-4 w-4 mr-2" />
+            Kaydet
           </Button>
         </div>
       </div>
@@ -348,8 +460,8 @@ export default function NewPostPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {categories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
+                        <SelectItem key={cat.id} value={cat.id.toString()}>
+                          {cat.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -364,8 +476,8 @@ export default function NewPostPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {authors.map((auth) => (
-                        <SelectItem key={auth} value={auth}>
-                          {auth}
+                        <SelectItem key={auth.id} value={auth.id.toString()}>
+                          {auth.first_name} {auth.last_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -396,20 +508,315 @@ export default function NewPostPage() {
                       alt="Öne çıkan görsel"
                       className="w-full h-32 object-cover rounded-lg"
                     />
-                    <Button variant="outline" size="sm" onClick={() => setFeaturedImage("")} className="w-full">
-                      <X className="h-4 w-4 mr-2" />
-                      Görseli Kaldır
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setFeaturedImage("")} 
+                        className="flex-1"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Kaldır
+                      </Button>
+                      <Dialog open={isMediaSelectorOpen} onOpenChange={setIsMediaSelectorOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <ImageIcon className="h-4 w-4 mr-2" />
+                            Değiştir
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+                          <DialogHeader>
+                            <DialogTitle>Medya Seç</DialogTitle>
+                            <DialogDescription>
+                              Öne çıkan görsel için bir resim seçin.
+                            </DialogDescription>
+                          </DialogHeader>
+                          
+                          {/* Medya Seçici İçeriği */}
+                          <div className="space-y-4">
+                            {/* Arama ve Görünüm */}
+                            <div className="flex gap-2">
+                              <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                  placeholder="Resim ara..."
+                                  value={mediaSearchQuery}
+                                  onChange={(e) => setMediaSearchQuery(e.target.value)}
+                                  className="pl-10"
+                                />
+                              </div>
+                              <Button
+                                variant={mediaViewMode === "grid" ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setMediaViewMode("grid")}
+                              >
+                                <Grid3X3 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant={mediaViewMode === "list" ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setMediaViewMode("list")}
+                              >
+                                <List className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {/* Medya Listesi */}
+                            <div className="max-h-96 overflow-y-auto">
+                              {mediaLoading ? (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  {Array.from({ length: 8 }).map((_, index) => (
+                                    <div key={index} className="animate-pulse">
+                                      <div className="aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg mb-2" />
+                                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : mediaFiles.length === 0 ? (
+                                <div className="text-center text-gray-500 py-8">
+                                  Resim bulunamadı.
+                                </div>
+                              ) : mediaViewMode === "grid" ? (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  {mediaFiles.map((file) => (
+                                    <div
+                                      key={file.id}
+                                      className={`relative group cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+                                        selectedMedia?.id === file.id 
+                                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                      }`}
+                                      onClick={() => handleSelectMedia(file)}
+                                    >
+                                      <div className="aspect-square">
+                                        <img
+                                          src={getImageUrl(file, 'featured')}
+                                          alt={file.alt_text || file.name}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      </div>
+                                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all flex items-center justify-center">
+                                        {selectedMedia?.id === file.id && (
+                                          <div className="bg-blue-500 text-white rounded-full p-1">
+                                            <Check className="h-4 w-4" />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="p-2 bg-white dark:bg-gray-800">
+                                        <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                                          {file.name}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                          {file.width} × {file.height}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {mediaFiles.map((file) => (
+                                    <div
+                                      key={file.id}
+                                      className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                                        selectedMedia?.id === file.id 
+                                          ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-500' 
+                                          : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                                      }`}
+                                      onClick={() => handleSelectMedia(file)}
+                                    >
+                                      <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden">
+                                        <img
+                                          src={file.url}
+                                          alt={file.alt_text || file.name}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                          {file.name}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                          {file.width} × {file.height}
+                                        </p>
+                                      </div>
+                                      {selectedMedia?.id === file.id && (
+                                        <Check className="h-4 w-4 text-blue-500" />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsMediaSelectorOpen(false)}>
+                              İptal
+                            </Button>
+                            <Button 
+                              onClick={() => setIsMediaSelectorOpen(false)}
+                              disabled={!selectedMedia}
+                            >
+                              Seç
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   </div>
                 ) : (
                   <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
                     <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">Görsel yükleyin veya URL girin</p>
                     <div className="space-y-2">
-                      <Button size="sm" variant="outline">
-                        <Upload className="h-4 w-4 mr-2" />
-                        Dosya Yükle
-                      </Button>
+                      <Dialog open={isMediaSelectorOpen} onOpenChange={setIsMediaSelectorOpen}>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="w-full">
+                            <ImageIcon className="h-4 w-4 mr-2" />
+                            Medyadan Seç
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+                          <DialogHeader>
+                            <DialogTitle>Medya Seç</DialogTitle>
+                            <DialogDescription>
+                              Öne çıkan görsel için bir resim seçin.
+                            </DialogDescription>
+                          </DialogHeader>
+                          
+                          {/* Medya Seçici İçeriği */}
+                          <div className="space-y-4">
+                            {/* Arama ve Görünüm */}
+                            <div className="flex gap-2">
+                              <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                  placeholder="Resim ara..."
+                                  value={mediaSearchQuery}
+                                  onChange={(e) => setMediaSearchQuery(e.target.value)}
+                                  className="pl-10"
+                                />
+                              </div>
+                              <Button
+                                variant={mediaViewMode === "grid" ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setMediaViewMode("grid")}
+                              >
+                                <Grid3X3 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant={mediaViewMode === "list" ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setMediaViewMode("list")}
+                              >
+                                <List className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {/* Medya Listesi */}
+                            <div className="max-h-96 overflow-y-auto">
+                              {mediaLoading ? (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  {Array.from({ length: 8 }).map((_, index) => (
+                                    <div key={index} className="animate-pulse">
+                                      <div className="aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg mb-2" />
+                                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : mediaFiles.length === 0 ? (
+                                <div className="text-center text-gray-500 py-8">
+                                  Resim bulunamadı.
+                                </div>
+                              ) : mediaViewMode === "grid" ? (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  {mediaFiles.map((file) => (
+                                    <div
+                                      key={file.id}
+                                      className={`relative group cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+                                        selectedMedia?.id === file.id 
+                                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                      }`}
+                                      onClick={() => handleSelectMedia(file)}
+                                    >
+                                      <div className="aspect-square">
+                                        <img
+                                          src={getImageUrl(file, 'featured')}
+                                          alt={file.alt_text || file.name}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      </div>
+                                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all flex items-center justify-center">
+                                        {selectedMedia?.id === file.id && (
+                                          <div className="bg-blue-500 text-white rounded-full p-1">
+                                            <Check className="h-4 w-4" />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="p-2 bg-white dark:bg-gray-800">
+                                        <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                                          {file.name}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                          {file.width} × {file.height}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {mediaFiles.map((file) => (
+                                    <div
+                                      key={file.id}
+                                      className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                                        selectedMedia?.id === file.id 
+                                          ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-500' 
+                                          : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                                      }`}
+                                      onClick={() => handleSelectMedia(file)}
+                                    >
+                                      <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden">
+                                        <img
+                                          src={file.url}
+                                          alt={file.alt_text || file.name}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                          {file.name}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                          {file.width} × {file.height}
+                                        </p>
+                                      </div>
+                                      {selectedMedia?.id === file.id && (
+                                        <Check className="h-4 w-4 text-blue-500" />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsMediaSelectorOpen(false)}>
+                              İptal
+                            </Button>
+                            <Button 
+                              onClick={() => setIsMediaSelectorOpen(false)}
+                              disabled={!selectedMedia}
+                            >
+                              Seç
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                       <Input
                         placeholder="Görsel URL'si..."
                         value={featuredImage}
@@ -453,9 +860,9 @@ export default function NewPostPage() {
                 {tags.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                        {tag}
-                        <button onClick={() => removeTag(tag)} className="ml-1 hover:text-red-500">
+                      <Badge key={tag.id} variant="secondary" className="flex items-center gap-1">
+                        {tag.name}
+                        <button onClick={() => removeTag(tag.name)} className="ml-1 hover:text-red-500">
                           <X className="h-3 w-3" />
                         </button>
                       </Badge>

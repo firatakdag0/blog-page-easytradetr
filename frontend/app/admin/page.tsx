@@ -1,439 +1,500 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import {
-  BarChart3,
-  TrendingUp,
-  Eye,
-  MessageSquare,
-  Heart,
-  FileText,
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Progress } from "@/components/ui/progress"
+import { apiClient, BlogPost, Category, Comment } from "@/lib/api"
+import Link from "next/link"
+import { 
+  FileText, 
+  FolderOpen, 
+  MessageSquare, 
+  Image, 
+  Plus, 
+  TrendingUp, 
+  Users, 
+  Eye, 
+  Heart, 
   Calendar,
   Clock,
-  Star,
-  ArrowUpRight,
+  BarChart3,
   Activity,
-  Target,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Star,
   Zap,
+  Target,
+  Award
 } from "lucide-react"
-import Link from "next/link"
-
-// Mock data
-const dashboardStats = [
-  {
-    title: "Toplam Görüntülenme",
-    value: "45,234",
-    change: "+12.5%",
-    changeType: "increase" as const,
-    icon: Eye,
-    color: "text-blue-500",
-    bgColor: "bg-blue-50 dark:bg-blue-900/20",
-  },
-  {
-    title: "Toplam İçerik",
-    value: "24",
-    change: "+3",
-    changeType: "increase" as const,
-    icon: FileText,
-    color: "text-green-500",
-    bgColor: "bg-green-50 dark:bg-green-900/20",
-  },
-  {
-    title: "Toplam Yorum",
-    value: "1,234",
-    change: "+8.2%",
-    changeType: "increase" as const,
-    icon: MessageSquare,
-    color: "text-purple-500",
-    bgColor: "bg-purple-50 dark:bg-purple-900/20",
-  },
-  {
-    title: "Toplam Beğeni",
-    value: "3,456",
-    change: "+15.3%",
-    changeType: "increase" as const,
-    icon: Heart,
-    color: "text-red-500",
-    bgColor: "bg-red-50 dark:bg-red-900/20",
-  },
-]
-
-const recentPosts = [
-  {
-    id: 1,
-    title: "2024'te Küçük İşletmeler İçin Dijital Dönüşüm Stratejileri",
-    status: "published",
-    views: 2300,
-    comments: 12,
-    likes: 45,
-    publishedAt: "2024-01-15",
-    author: "Ahmet Yılmaz",
-    isFeatured: true,
-    isTrending: true,
-  },
-  {
-    id: 2,
-    title: "Barkod Sistemi ile Stok Yönetiminde %90 Zaman Tasarrufu",
-    status: "published",
-    views: 1900,
-    comments: 8,
-    likes: 38,
-    publishedAt: "2024-01-12",
-    author: "Zeynep Kaya",
-    isFeatured: true,
-    isTrending: false,
-  },
-  {
-    id: 3,
-    title: "Perakende Sektöründe Müşteri Deneyimi Optimizasyonu",
-    status: "draft",
-    views: 0,
-    comments: 0,
-    likes: 0,
-    publishedAt: null,
-    author: "Mehmet Demir",
-    isFeatured: false,
-    isTrending: false,
-  },
-]
-
-const recentComments = [
-  {
-    id: 1,
-    author: "Ayşe Özkan",
-    content: "Çok faydalı bir yazı olmuş, teşekkürler!",
-    postTitle: "Dijital Dönüşüm Stratejileri",
-    createdAt: "2 saat önce",
-    status: "approved",
-  },
-  {
-    id: 2,
-    author: "Mehmet Yıldız",
-    content: "Bu konuda daha detaylı bilgi alabilir miyim?",
-    postTitle: "Barkod Sistemi ile Stok Yönetimi",
-    createdAt: "4 saat önce",
-    status: "pending",
-  },
-  {
-    id: 3,
-    author: "Fatma Kaya",
-    content: "Harika açıklamalar, işime çok yarayacak.",
-    postTitle: "Müşteri Deneyimi Optimizasyonu",
-    createdAt: "6 saat önce",
-    status: "approved",
-  },
-]
-
-const quickActions = [
-  {
-    title: "Yeni İçerik Oluştur",
-    description: "Blog yazısı ekle",
-    icon: FileText,
-    href: "/admin/posts/new",
-    color: "bg-blue-500",
-  },
-  {
-    title: "Kategorileri Yönet",
-    description: "Kategori düzenle",
-    icon: Target,
-    href: "/admin/categories",
-    color: "bg-green-500",
-  },
-  {
-    title: "Yorumları İncele",
-    description: "Bekleyen yorumlar",
-    icon: MessageSquare,
-    href: "/admin/comments",
-    color: "bg-purple-500",
-  },
-  {
-    title: "Analitikleri Gör",
-    description: "Detaylı raporlar",
-    icon: BarChart3,
-    href: "/admin/analytics",
-    color: "bg-orange-500",
-  },
-]
 
 export default function AdminDashboard() {
+  const [postCount, setPostCount] = useState(0)
+  const [categoryCount, setCategoryCount] = useState(0)
+  const [commentCount, setCommentCount] = useState(0)
+  const [recentPosts, setRecentPosts] = useState<BlogPost[]>([])
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalViews: 0,
+    totalLikes: 0,
+    totalComments: 0,
+    publishedPosts: 0,
+    draftPosts: 0,
+    featuredPosts: 0,
+    trendingPosts: 0
+  })
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        // Posts
+        const postsRes = await apiClient.getAdminPosts({ per_page: 50 })
+        setRecentPosts(postsRes.slice(0, 5))
+        setPostCount(postsRes.length)
+        
+        // Categories
+        const categoriesRes = await apiClient.getCategories()
+        setCategoryCount(categoriesRes.length)
+        
+        // Comments
+        const commentsRes = await apiClient.getAllComments()
+        setCommentCount(commentsRes.length)
+
+        // İstatistikleri hesapla
+        const publishedPosts = postsRes.filter(p => p.status === "published").length
+        const draftPosts = postsRes.filter(p => p.status === "draft").length
+        const featuredPosts = postsRes.filter(p => p.is_featured).length
+        const trendingPosts = postsRes.filter(p => p.is_trending).length
+        const totalViews = postsRes.reduce((sum, p) => sum + p.views_count, 0)
+        const totalLikes = postsRes.reduce((sum, p) => sum + p.likes_count, 0)
+        const totalComments = postsRes.reduce((sum, p) => sum + p.comments_count, 0)
+
+        setStats({
+          totalViews,
+          totalLikes,
+          totalComments,
+          publishedPosts,
+          draftPosts,
+          featuredPosts,
+          trendingPosts
+        })
+      } catch (err) {
+        console.error("Dashboard data fetch error:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "published":
+        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Yayında</Badge>
+      case "draft":
+        return <Badge variant="secondary">Taslak</Badge>
+      case "scheduled":
+        return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Zamanlanmış</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
+  const StatCard = ({ 
+    title, 
+    value, 
+    icon: Icon, 
+    color, 
+    trend, 
+    trendValue, 
+    link 
+  }: {
+    title: string
+    value: string | number
+    icon: any
+    color: string
+    trend?: "up" | "down"
+    trendValue?: string
+    link?: string
+  }) => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <Card className="hover:shadow-lg transition-all duration-300 group cursor-pointer">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">{title}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{value}</p>
+                {trend && (
+                  <div className={`flex items-center gap-1 text-sm ${
+                    trend === "up" ? "text-green-600" : "text-red-600"
+                  }`}>
+                    {trend === "up" ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                    {trendValue}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className={`p-3 rounded-xl ${color} group-hover:scale-110 transition-transform duration-300`}>
+              <Icon className="h-6 w-6 text-white" />
+            </div>
+          </div>
+          {link && (
+            <Link href={link} className="block mt-4 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors">
+              Detayları gör →
+            </Link>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+
   return (
     <div className="space-y-8">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Blog yönetim paneline hoş geldiniz. İşte güncel istatistikleriniz.
-          </p>
+          <motion.h1 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+            className="text-4xl font-bold text-gray-900 dark:text-white mb-2"
+          >
+            Anasayfa
+          </motion.h1>
+          <motion.p 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="text-gray-600 dark:text-gray-400"
+          >
+            Blog yönetim panelinize hoş geldiniz. İçeriklerinizi ve istatistiklerinizi buradan takip edin.
+          </motion.p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          <Calendar className="h-4 w-4" />
-          Son güncelleme: {new Date().toLocaleDateString("tr-TR")}
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {dashboardStats.map((stat, index) => {
-          const Icon = stat.icon
-          return (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-            >
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{stat.title}</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">{stat.value}</p>
-                      <div className="flex items-center mt-2">
-                        <span
-                          className={`text-sm font-medium ${
-                            stat.changeType === "increase" ? "text-green-600" : "text-red-600"
-                          }`}
-                        >
-                          {stat.change}
-                        </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">bu ay</span>
-                      </div>
-                    </div>
-                    <div className={`p-3 rounded-xl ${stat.bgColor}`}>
-                      <Icon className={`h-6 w-6 ${stat.color}`} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )
-        })}
-      </div>
-
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.4 }}
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-[hsl(135,100%,50%)]" />
-              Hızlı İşlemler
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {quickActions.map((action, index) => {
-                const Icon = action.icon
-                return (
-                  <Link key={index} href={action.href}>
-                    <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-[hsl(135,100%,50%)] hover:shadow-md transition-all duration-300 group cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`p-2 rounded-lg ${action.color} text-white group-hover:scale-110 transition-transform`}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900 dark:text-white text-sm">{action.title}</h3>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{action.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Recent Posts */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-        >
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-blue-500" />
-                Son İçerikler
-              </CardTitle>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/admin/posts">
-                  Tümünü Gör
-                  <ArrowUpRight className="h-4 w-4 ml-2" />
-                </Link>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentPosts.map((post) => (
-                  <div
-                    key={post.id}
-                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-gray-900 dark:text-white text-sm line-clamp-1">
-                          {post.title}
-                        </h3>
-                        {post.isFeatured && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Star className="h-3 w-3 mr-1" />
-                            Öne Çıkan
-                          </Badge>
-                        )}
-                        {post.isTrending && (
-                          <Badge className="bg-[hsl(135,100%,50%)] text-black text-xs">
-                            <TrendingUp className="h-3 w-3 mr-1" />
-                            Trend
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                        <span>{post.author}</span>
-                        <span className="flex items-center gap-1">
-                          <Eye className="h-3 w-3" />
-                          {post.views}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MessageSquare className="h-3 w-3" />
-                          {post.comments}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Heart className="h-3 w-3" />
-                          {post.likes}
-                        </span>
-                      </div>
-                    </div>
-                    <Badge variant={post.status === "published" ? "default" : "secondary"} className="ml-4">
-                      {post.status === "published" ? "Yayında" : "Taslak"}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Recent Comments */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-purple-500" />
-                Son Yorumlar
-              </CardTitle>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/admin/comments">
-                  Tümünü Gör
-                  <ArrowUpRight className="h-4 w-4 ml-2" />
-                </Link>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentComments.map((comment) => (
-                  <div key={comment.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            {comment.author
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="font-semibold text-sm text-gray-900 dark:text-white">{comment.author}</span>
-                      </div>
-                      <Badge variant={comment.status === "approved" ? "default" : "secondary"} className="text-xs">
-                        {comment.status === "approved" ? "Onaylı" : "Bekliyor"}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-2 line-clamp-2">{comment.content}</p>
-                    <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                      <span>{comment.postTitle}</span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {comment.createdAt}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <Button className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black" asChild>
+            <Link href="/admin/posts/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Yeni İçerik
+            </Link>
+          </Button>
         </motion.div>
       </div>
 
-      {/* Activity Feed */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.7 }}
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-green-500" />
-              Son Aktiviteler
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                {
-                  action: "Yeni içerik yayınlandı",
-                  item: "Dijital Dönüşüm Stratejileri",
-                  time: "2 saat önce",
-                  type: "post",
-                },
-                { action: "Yorum onaylandı", item: "Barkod Sistemi yazısında", time: "4 saat önce", type: "comment" },
-                { action: "Kategori güncellendi", item: "Bulut Teknoloji", time: "6 saat önce", type: "category" },
-                { action: "Yeni kullanıcı kaydı", item: "Ayşe Özkan", time: "8 saat önce", type: "user" },
-              ].map((activity, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-4 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                >
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      activity.type === "post"
-                        ? "bg-blue-500"
-                        : activity.type === "comment"
-                          ? "bg-purple-500"
-                          : activity.type === "category"
-                            ? "bg-green-500"
-                            : "bg-orange-500"
-                    }`}
+      {/* Ana İstatistik Kartları */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Toplam İçerik"
+          value={loading ? "..." : postCount}
+          icon={FileText}
+          color="bg-gradient-to-br from-blue-500 to-blue-600"
+          trend="up"
+          trendValue="12%"
+          link="/admin/posts"
+        />
+        <StatCard
+          title="Toplam Görüntülenme"
+          value={loading ? "..." : stats.totalViews.toLocaleString()}
+          icon={Eye}
+          color="bg-gradient-to-br from-purple-500 to-purple-600"
+          trend="up"
+          trendValue="8%"
+        />
+        <StatCard
+          title="Toplam Beğeni"
+          value={loading ? "..." : stats.totalLikes.toLocaleString()}
+          icon={Heart}
+          color="bg-gradient-to-br from-red-500 to-red-600"
+          trend="up"
+          trendValue="15%"
+        />
+        <StatCard
+          title="Toplam Yorum"
+          value={loading ? "..." : commentCount}
+          icon={MessageSquare}
+          color="bg-gradient-to-br from-orange-500 to-orange-600"
+          trend="up"
+          trendValue="5%"
+          link="/admin/comments"
+        />
+      </div>
+
+      {/* İkinci Satır İstatistikler */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Yayında"
+          value={loading ? "..." : stats.publishedPosts}
+          icon={CheckCircle}
+          color="bg-gradient-to-br from-green-500 to-green-600"
+        />
+        <StatCard
+          title="Taslak"
+          value={loading ? "..." : stats.draftPosts}
+          icon={Clock}
+          color="bg-gradient-to-br from-gray-500 to-gray-600"
+        />
+        <StatCard
+          title="Öne Çıkan"
+          value={loading ? "..." : stats.featuredPosts}
+          icon={Star}
+          color="bg-gradient-to-br from-yellow-500 to-yellow-600"
+        />
+        <StatCard
+          title="Trend"
+          value={loading ? "..." : stats.trendingPosts}
+          icon={TrendingUp}
+          color="bg-gradient-to-br from-[hsl(135,100%,50%)] to-[hsl(135,100%,45%)]"
+        />
+      </div>
+
+      {/* Ana İçerik Alanı */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Son İçerikler */}
+        <div className="lg:col-span-2">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+          >
+            <Card className="h-full">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-blue-600" />
+                    Son İçerikler
+                  </CardTitle>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    En son eklenen blog yazıları
+                  </p>
+                </div>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/admin/posts">
+                    Tümünü Gör
+                  </Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  </div>
+                ) : recentPosts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-600 dark:text-gray-400">Henüz içerik eklenmemiş</p>
+                    <Button asChild className="mt-4" size="sm">
+                      <Link href="/admin/posts/new">
+                        <Plus className="h-4 w-4 mr-2" />
+                        İlk İçeriğinizi Oluşturun
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  recentPosts.map((post, index) => (
+                    <motion.div
+                      key={post.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: 0.4 + index * 0.1 }}
+                      className="flex items-center gap-4 p-4 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-1">
+                            {post.title}
+                          </h3>
+                          {post.is_featured && (
+                            <Star className="h-4 w-4 text-yellow-500" />
+                          )}
+                          {post.is_trending && (
+                            <TrendingUp className="h-4 w-4 text-[hsl(135,100%,50%)]" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <Avatar className="h-4 w-4">
+                              <AvatarImage src={post.author.avatar || "/placeholder.svg"} />
+                              <AvatarFallback className="text-xs">
+                                {post.author.name.split(" ").map((n) => n[0]).join("")}
+                              </AvatarFallback>
+                            </Avatar>
+                            {post.author.name}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {new Date(post.created_at).toLocaleDateString("tr-TR")}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Eye className="h-3 w-3" />
+                            {post.views_count}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(post.status)}
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/admin/posts/${post.id}/edit`}>
+                            Düzenle
+                          </Link>
+                        </Button>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* Hızlı Eylemler ve İstatistikler */}
+        <div className="space-y-6">
+          {/* Hızlı Eylemler */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-yellow-600" />
+                  Hızlı Eylemler
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button asChild className="w-full justify-start" variant="outline">
+                  <Link href="/admin/posts/new">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Yeni İçerik Oluştur
+                  </Link>
+                </Button>
+                <Button asChild className="w-full justify-start" variant="outline">
+                  <Link href="/admin/categories">
+                    <FolderOpen className="h-4 w-4 mr-2" />
+                    Kategorileri Yönet
+                  </Link>
+                </Button>
+                <Button asChild className="w-full justify-start" variant="outline">
+                  <Link href="/admin/media">
+                    <Image className="h-4 w-4 mr-2" />
+                    Medya Yönetimi
+                  </Link>
+                </Button>
+                <Button asChild className="w-full justify-start" variant="outline">
+                  <Link href="/admin/comments">
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Yorumları Görüntüle
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Performans Özeti */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-purple-600" />
+                  Performans Özeti
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Yayın Oranı</span>
+                    <span className="text-sm text-gray-600">
+                      {postCount > 0 ? Math.round((stats.publishedPosts / postCount) * 100) : 0}%
+                    </span>
+                  </div>
+                  <Progress 
+                    value={postCount > 0 ? (stats.publishedPosts / postCount) * 100 : 0} 
+                    className="h-2"
                   />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-900 dark:text-white">
-                      <span className="font-medium">{activity.action}:</span> {activity.item}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{activity.time}</p>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Etkileşim Oranı</span>
+                    <span className="text-sm text-gray-600">
+                      {stats.totalViews > 0 ? Math.round((stats.totalLikes / stats.totalViews) * 100) : 0}%
+                    </span>
+                  </div>
+                  <Progress 
+                    value={stats.totalViews > 0 ? (stats.totalLikes / stats.totalViews) * 100 : 0} 
+                    className="h-2"
+                  />
+                </div>
+                <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Ortalama Görüntülenme</span>
+                    <span className="font-medium">
+                      {postCount > 0 ? Math.round(stats.totalViews / postCount) : 0}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Sistem Durumu */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.6 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-green-600" />
+                  Sistem Durumu
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">API Durumu</span>
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Aktif
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Veritabanı</span>
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Bağlı
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Medya Depolama</span>
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Hazır
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+      </div>
     </div>
   )
 }

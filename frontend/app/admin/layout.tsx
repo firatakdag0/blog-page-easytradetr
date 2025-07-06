@@ -2,12 +2,13 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { Card, CardContent } from "@/components/ui/card"
+import { Toaster } from "@/components/ui/toaster"
 import {
   LayoutDashboard,
   FileText,
@@ -27,14 +28,25 @@ import {
   Eye,
   TrendingUp,
   Star,
+  Tag,
+  Heart,
+  Activity,
+  CheckCircle,
+  Zap,
+  ExternalLink,
+  Calendar,
+  Clock,
+  AlertCircle,
+  User,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Suspense } from "react"
+import { apiClient } from "@/lib/api"
 
 const sidebarItems = [
   {
-    title: "Dashboard",
+    title: "Anasayfa",
     href: "/admin",
     icon: LayoutDashboard,
     badge: null,
@@ -43,7 +55,7 @@ const sidebarItems = [
     title: "İçerikler",
     href: "/admin/posts",
     icon: FileText,
-    badge: "24",
+    badge: null,
   },
   {
     title: "Kategoriler",
@@ -52,10 +64,22 @@ const sidebarItems = [
     badge: null,
   },
   {
+    title: "Yazarlar",
+    href: "/admin/authors",
+    icon: User,
+    badge: null,
+  },
+  {
+    title: "Etiketler",
+    href: "/admin/tags",
+    icon: Tag,
+    badge: null,
+  },
+  {
     title: "Yorumlar",
     href: "/admin/comments",
     icon: MessageSquare,
-    badge: "12",
+    badge: null,
   },
   {
     title: "Kullanıcılar",
@@ -83,16 +107,80 @@ const sidebarItems = [
   },
 ]
 
-const quickStats = [
-  { label: "Toplam Görüntülenme", value: "45.2K", icon: Eye, color: "text-blue-500" },
-  { label: "Aktif İçerik", value: "24", icon: FileText, color: "text-green-500" },
-  { label: "Trend İçerik", value: "8", icon: TrendingUp, color: "text-orange-500" },
-  { label: "Öne Çıkan", value: "6", icon: Star, color: "text-yellow-500" },
+const quickActions = [
+  {
+    title: "Yeni İçerik",
+    href: "/admin/posts/new",
+    icon: Plus,
+    color: "bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-[hsl(135,100%,50%)] hover:text-black border border-gray-200 dark:border-gray-700",
+  },
+  {
+    title: "Yeni Kategori",
+    href: "/admin/categories",
+    icon: FolderOpen,
+    color: "bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-[hsl(135,100%,50%)] hover:text-black border border-gray-200 dark:border-gray-700",
+  },
+  {
+    title: "Medya Yükle",
+    href: "/admin/media",
+    icon: ImageIcon,
+    color: "bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-[hsl(135,100%,50%)] hover:text-black border border-gray-200 dark:border-gray-700",
+  },
+  {
+    title: "Blog'a Git",
+    href: "/blog",
+    icon: ExternalLink,
+    color: "bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-[hsl(135,100%,50%)] hover:text-black border border-gray-200 dark:border-gray-700",
+  },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [stats, setStats] = useState({
+    totalPosts: 0,
+    publishedPosts: 0,
+    totalViews: 0,
+    totalLikes: 0,
+    totalComments: 0,
+    featuredPosts: 0,
+    trendingPosts: 0,
+  })
+  const [loading, setLoading] = useState(true)
   const pathname = usePathname()
+
+  // İstatistikleri yükle
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [posts, comments] = await Promise.all([
+          apiClient.getAdminPosts({ per_page: 100 }),
+          apiClient.getAllComments(),
+        ])
+
+        const publishedPosts = posts.filter(p => p.status === "published").length
+        const featuredPosts = posts.filter(p => p.is_featured).length
+        const trendingPosts = posts.filter(p => p.is_trending).length
+        const totalViews = posts.reduce((sum, p) => sum + p.views_count, 0)
+        const totalLikes = posts.reduce((sum, p) => sum + p.likes_count, 0)
+
+        setStats({
+          totalPosts: posts.length,
+          publishedPosts,
+          totalViews,
+          totalLikes,
+          totalComments: comments.length,
+          featuredPosts,
+          trendingPosts,
+        })
+      } catch (err) {
+        console.error("Stats fetch error:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchStats()
+  }, [])
 
   const isActive = (href: string) => {
     if (href === "/admin") {
@@ -101,29 +189,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return pathname.startsWith(href)
   }
 
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
+    return num.toString()
+  }
+
   return (
     <Suspense fallback={null}>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         {/* Mobile Sidebar Overlay */}
-        <AnimatePresence>
-          {sidebarOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 bg-black/50 lg:hidden"
-              onClick={() => setSidebarOpen(false)}
-            />
-          )}
-        </AnimatePresence>
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
         {/* Sidebar */}
-        <motion.aside
-          initial={false}
-          animate={{
-            x: sidebarOpen ? 0 : "-100%",
-          }}
-          className="fixed left-0 top-0 z-50 h-full w-72 bg-white dark:bg-gray-800 shadow-xl lg:translate-x-0 lg:shadow-none border-r border-gray-200 dark:border-gray-700"
+        <aside
+          className={`fixed left-0 top-0 z-50 h-full w-80 bg-white dark:bg-gray-800 shadow-xl border-r border-gray-200 dark:border-gray-700 overflow-y-auto transition-transform duration-300 ${
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          }`}
         >
           {/* Sidebar Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
@@ -141,32 +228,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Button>
           </div>
 
-          {/* Quick Stats */}
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wider">
-              Hızlı İstatistikler
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {quickStats.map((stat, index) => {
-                const Icon = stat.icon
-                return (
-                  <div
-                    key={index}
-                    className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon className={`h-4 w-4 ${stat.color}`} />
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">{stat.value}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</p>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
           {/* Navigation */}
-          <nav className="p-6">
+          <nav className="p-6 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wider">
               Navigasyon
             </h3>
@@ -192,7 +255,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       {item.badge && (
                         <Badge
                           variant={active ? "secondary" : "outline"}
-                          className={`ml-auto text-xs ${active ? "bg-black/10 text-black" : ""}`}
+                          className={`ml-auto text-xs ${active ? "bg-[hsl(135,100%,50%)] text-black" : ""}`}
                         >
                           {item.badge}
                         </Badge>
@@ -204,8 +267,108 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </ul>
           </nav>
 
+          {/* Quick Actions */}
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wider">
+              Hızlı Eylemler
+            </h3>
+            <div className="space-y-2">
+              {quickActions.map((action) => {
+                const Icon = action.icon
+                return (
+                  <Button
+                    key={action.href}
+                    asChild
+                    size="sm"
+                    className={`w-full justify-start text-white ${action.color}`}
+                  >
+                    <Link href={action.href} onClick={() => setSidebarOpen(false)} target={action.title === "Blog'a Git" ? "_blank" : undefined} rel={action.title === "Blog'a Git" ? "noopener noreferrer" : undefined}>
+                      <Icon className="h-4 w-4 mr-2" />
+                      {action.title}
+                    </Link>
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wider">
+              Hızlı İstatistikler
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Eye className="h-4 w-4 text-blue-500" />
+                  <span className="text-lg font-bold text-gray-900 dark:text-white">
+                    {loading ? "..." : formatNumber(stats.totalViews)}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Görüntülenme</p>
+              </div>
+              <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="h-4 w-4 text-green-500" />
+                  <span className="text-lg font-bold text-gray-900 dark:text-white">
+                    {loading ? "..." : stats.publishedPosts}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Yayında</p>
+              </div>
+              <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Heart className="h-4 w-4 text-red-500" />
+                  <span className="text-lg font-bold text-gray-900 dark:text-white">
+                    {loading ? "..." : formatNumber(stats.totalLikes)}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Beğeni</p>
+              </div>
+              <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <MessageSquare className="h-4 w-4 text-orange-500" />
+                  <span className="text-lg font-bold text-gray-900 dark:text-white">
+                    {loading ? "..." : stats.totalComments}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Yorum</p>
+              </div>
+            </div>
+          </div>
+
+          {/* System Status */}
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wider">
+              Sistem Durumu
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">API</span>
+                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Aktif
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Veritabanı</span>
+                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Bağlı
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Medya</span>
+                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Hazır
+                </Badge>
+              </div>
+            </div>
+          </div>
+
           {/* User Profile */}
-          <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="p-6 border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-3 mb-4">
               <Avatar className="h-10 w-10">
                 <AvatarImage src="/placeholder.svg?height=40&width=40" />
@@ -218,7 +381,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="flex-1 bg-transparent" asChild>
-                <Link href="/blog">
+                <Link href="/blog" target="_blank" rel="noopener noreferrer">
                   <Home className="h-4 w-4 mr-2" />
                   Blog'a Git
                 </Link>
@@ -229,10 +392,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </Button>
             </div>
           </div>
-        </motion.aside>
+        </aside>
 
         {/* Main Content */}
-        <div className="lg:ml-72">
+        <div className="lg:ml-80">
           {/* Top Header */}
           <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
             <div className="flex items-center justify-between">
@@ -280,6 +443,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <main className="p-6">{children}</main>
         </div>
       </div>
+      <Toaster />
     </Suspense>
   )
 }

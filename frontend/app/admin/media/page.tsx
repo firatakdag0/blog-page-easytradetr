@@ -1,21 +1,21 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,271 +28,266 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
-  ImageIcon,
-  Upload,
+  Image,
+  Plus,
   Search,
   MoreHorizontal,
   Download,
-  Trash2,
   Copy,
+  Trash2,
   Eye,
-  Edit,
-  FolderOpen,
-  File,
-  Video,
-  Music,
-  Archive,
+  Calendar,
+  FileText,
+  Upload,
   Grid3X3,
   List,
-  Calendar,
-  HardDrive,
+  Filter,
+  Loader2,
 } from "lucide-react"
-
-// Mock media data
-const mediaFiles = [
-  {
-    id: 1,
-    name: "dijital-donusum-hero.jpg",
-    type: "image",
-    size: "2.4 MB",
-    dimensions: "1920x1080",
-    url: "/placeholder.svg?height=200&width=300",
-    uploadDate: "2024-01-15T10:00:00Z",
-    usedIn: ["Dijital Dönüşüm Stratejileri"],
-    alt: "Dijital dönüşüm görseli",
-  },
-  {
-    id: 2,
-    name: "barkod-sistemi-demo.mp4",
-    type: "video",
-    size: "15.7 MB",
-    dimensions: "1280x720",
-    url: "/placeholder.svg?height=200&width=300",
-    uploadDate: "2024-01-12T14:30:00Z",
-    usedIn: ["Barkod Sistemi Rehberi"],
-    alt: "Barkod sistemi demo videosu",
-  },
-  {
-    id: 3,
-    name: "perakende-infografik.png",
-    type: "image",
-    size: "1.8 MB",
-    dimensions: "800x1200",
-    url: "/placeholder.svg?height=200&width=300",
-    uploadDate: "2024-01-10T16:45:00Z",
-    usedIn: ["Perakende Optimizasyonu"],
-    alt: "Perakende infografiği",
-  },
-  {
-    id: 4,
-    name: "muhasebe-rapor-template.pdf",
-    type: "document",
-    size: "892 KB",
-    dimensions: null,
-    url: "/placeholder.svg?height=200&width=300",
-    uploadDate: "2024-01-08T09:15:00Z",
-    usedIn: ["Muhasebe Çözümleri"],
-    alt: "Muhasebe rapor şablonu",
-  },
-  {
-    id: 5,
-    name: "pos-sistem-ses.mp3",
-    type: "audio",
-    size: "3.2 MB",
-    dimensions: null,
-    url: "/placeholder.svg?height=200&width=300",
-    uploadDate: "2024-01-05T11:20:00Z",
-    usedIn: [],
-    alt: "POS sistem ses dosyası",
-  },
-  {
-    id: 6,
-    name: "logo-variations.zip",
-    type: "archive",
-    size: "5.1 MB",
-    dimensions: null,
-    url: "/placeholder.svg?height=200&width=300",
-    uploadDate: "2024-01-03T13:30:00Z",
-    usedIn: ["Marka Rehberi"],
-    alt: "Logo varyasyonları arşivi",
-  },
-]
-
-const fileTypes = ["Tümü", "image", "video", "document", "audio", "archive"]
-const sortOptions = ["Yeni", "Eski", "Boyut (Büyük)", "Boyut (Küçük)", "İsim (A-Z)", "İsim (Z-A)"]
+import { apiClient, MediaFile, getImageUrl } from "@/lib/api"
 
 export default function MediaPage() {
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedType, setSelectedType] = useState("Tümü")
-  const [sortBy, setSortBy] = useState("Yeni")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [selectedFiles, setSelectedFiles] = useState<number[]>([])
-  const [uploadDialog, setUploadDialog] = useState(false)
-  const [fileDetailDialog, setFileDetailDialog] = useState<any>(null)
-  const [dragOver, setDragOver] = useState(false)
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const filteredFiles = mediaFiles.filter((file) => {
-    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesType = selectedType === "Tümü" || file.type === selectedType
-    return matchesSearch && matchesType
-  })
+  useEffect(() => {
+    fetchMediaFiles()
+  }, [])
+
+  const fetchMediaFiles = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await apiClient.getMedia({
+        search: searchQuery,
+        per_page: 50
+      })
+      setMediaFiles(response.data)
+    } catch (err: any) {
+      console.error("Media fetch error:", err)
+      setError("Medya dosyaları yüklenemedi.")
+      toast.error("Medya dosyaları yüklenemedi", {
+        description: "Bir hata oluştu. Lütfen tekrar deneyin."
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Arama değiştiğinde dosyaları yeniden yükle
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchMediaFiles()
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery])
+
+  const handleFileUpload = async (files: FileList) => {
+    setUploading(true)
+    setUploadProgress(0)
+    
+    try {
+      const uploadPromises = Array.from(files).map(async (file, index) => {
+        // Simulated progress for each file
+        const progressIncrement = 100 / files.length
+        setUploadProgress((index * progressIncrement))
+        
+        const uploadedFile = await apiClient.uploadMedia(file)
+        
+        setUploadProgress(((index + 1) * progressIncrement))
+        return uploadedFile
+      })
+
+      const newFiles = await Promise.all(uploadPromises)
+      
+      // Yeni dosyaları listeye ekle
+      setMediaFiles([...newFiles, ...mediaFiles])
+      setIsUploadDialogOpen(false)
+      setUploadProgress(0)
+      
+      toast.success("Dosyalar başarıyla yüklendi!", {
+        description: `${files.length} dosya yüklendi.`
+      })
+    } catch (err: any) {
+      console.error("Upload error:", err)
+      const errorMessage = err.message || "Bir hata oluştu. Lütfen tekrar deneyin."
+      setError("Dosya yüklenemedi.")
+      toast.error("Dosya yüklenemedi", {
+        description: errorMessage
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDeleteFile = async (fileId: number) => {
+    try {
+      await apiClient.deleteMedia(fileId)
+      setMediaFiles(mediaFiles.filter(file => file.id !== fileId))
+      toast.success("Dosya başarıyla silindi!")
+    } catch (err: any) {
+      console.error("Delete error:", err)
+      setError("Dosya silinemedi.")
+      toast.error("Dosya silinemedi", {
+        description: "Bir hata oluştu. Lütfen tekrar deneyin."
+      })
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    try {
+      await apiClient.bulkDeleteMedia(selectedFiles)
+      setMediaFiles(mediaFiles.filter(file => !selectedFiles.includes(file.id)))
+      setSelectedFiles([])
+      toast.success("Dosyalar başarıyla silindi!", {
+        description: `${selectedFiles.length} dosya silindi.`
+      })
+    } catch (err: any) {
+      console.error("Bulk delete error:", err)
+      setError("Dosyalar silinemedi.")
+      toast.error("Dosyalar silinemedi", {
+        description: "Bir hata oluştu. Lütfen tekrar deneyin."
+      })
+    }
+  }
 
   const toggleFileSelection = (fileId: number) => {
-    setSelectedFiles((prev) => (prev.includes(fileId) ? prev.filter((id) => id !== fileId) : [...prev, fileId]))
-  }
-
-  const toggleSelectAll = () => {
-    setSelectedFiles(selectedFiles.length === filteredFiles.length ? [] : filteredFiles.map((file) => file.id))
-  }
-
-  const getFileIcon = (type: string) => {
-    switch (type) {
-      case "image":
-        return <ImageIcon className="w-5 h-5 text-blue-500" />
-      case "video":
-        return <Video className="w-5 h-5 text-purple-500" />
-      case "audio":
-        return <Music className="w-5 h-5 text-green-500" />
-      case "document":
-        return <File className="w-5 h-5 text-red-500" />
-      case "archive":
-        return <Archive className="w-5 h-5 text-orange-500" />
-      default:
-        return <File className="w-5 h-5 text-gray-500" />
-    }
-  }
-
-  const getFileTypeBadge = (type: string) => {
-    const colors = {
-      image: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-      video: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-      audio: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-      document: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-      archive: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-    }
-
-    return (
-      <Badge className={colors[type as keyof typeof colors] || "bg-gray-100 text-gray-800"}>{type.toUpperCase()}</Badge>
+    setSelectedFiles(prev => 
+      prev.includes(fileId) 
+        ? prev.filter(id => id !== fileId)
+        : [...prev, fileId]
     )
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("tr-TR", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
+  const toggleSelectAll = () => {
+    setSelectedFiles(selectedFiles.length === mediaFiles.length ? [] : mediaFiles.map(file => file.id))
   }
 
-  const handleBulkAction = (action: string) => {
-    console.log(`Bulk action: ${action} for files:`, selectedFiles)
-    setSelectedFiles([])
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  const handleFileAction = (fileId: number, action: string) => {
-    console.log(`Action: ${action} for file:`, fileId)
+  const getFileTypeIcon = (mimeType: string) => {
+    if (mimeType.startsWith("image/")) return "🖼️"
+    if (mimeType.startsWith("video/")) return "🎥"
+    if (mimeType.startsWith("audio/")) return "🎵"
+    return "📄"
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    const files = Array.from(e.dataTransfer.files)
-    console.log("Dropped files:", files)
-    // Handle file upload
-  }
-
-  const getStorageStats = () => {
-    const totalSize = mediaFiles.reduce((sum, file) => {
-      const sizeInMB = Number.parseFloat(file.size.replace(/[^\d.]/g, ""))
-      return sum + sizeInMB
-    }, 0)
-
-    return {
-      totalFiles: mediaFiles.length,
-      totalSize: `${totalSize.toFixed(1)} MB`,
-      images: mediaFiles.filter((f) => f.type === "image").length,
-      videos: mediaFiles.filter((f) => f.type === "video").length,
-      documents: mediaFiles.filter((f) => f.type === "document").length,
-      others: mediaFiles.filter((f) => !["image", "video", "document"].includes(f.type)).length,
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("URL kopyalandı!")
+    } catch (err) {
+      toast.error("URL kopyalanamadı")
     }
   }
 
-  const storageStats = getStorageStats()
+  const filteredFiles = mediaFiles.filter(file =>
+    file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    file.alt_text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    file.caption?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Medya Yönetimi</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Resim, video ve dosyalarınızı yükleyin, organize edin ve yönetin.
-          </p>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">Resimlerinizi ve dosyalarınızı yükleyin ve yönetin.</p>
         </div>
-        <Button
-          className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black"
-          onClick={() => setUploadDialog(true)}
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          Dosya Yükle
-        </Button>
-      </div>
-
-      {/* Storage Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        {[
-          { label: "Toplam Dosya", value: storageStats.totalFiles, icon: FolderOpen, color: "text-blue-500" },
-          { label: "Toplam Boyut", value: storageStats.totalSize, icon: HardDrive, color: "text-purple-500" },
-          { label: "Resimler", value: storageStats.images, icon: ImageIcon, color: "text-green-500" },
-          { label: "Videolar", value: storageStats.videos, icon: Video, color: "text-red-500" },
-          { label: "Diğer", value: storageStats.others, icon: File, color: "text-orange-500" },
-        ].map((stat, index) => {
-          const Icon = stat.icon
-          return (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.05 }}
-            >
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <Icon className={`w-5 h-5 ${stat.color}`} />
-                    <div>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{stat.label}</p>
-                    </div>
+        <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black">
+              <Upload className="h-4 w-4 mr-2" />
+              Dosya Yükle
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Dosya Yükle</DialogTitle>
+              <DialogDescription>
+                Bilgisayarınızdan dosya seçin veya sürükleyip bırakın.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <p className="text-gray-600 mb-4">
+                  Dosyaları buraya sürükleyin veya seçmek için tıklayın
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,video/*,audio/*"
+                  onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+                  className="hidden"
+                />
+                <Button 
+                  variant="outline" 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Yükleniyor...
+                    </>
+                  ) : (
+                    "Dosya Seç"
+                  )}
+                </Button>
+              </div>
+              {uploading && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Yükleniyor...</span>
+                    <span>{Math.round(uploadProgress)}%</span>
                   </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )
-        })}
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsUploadDialogOpen(false)}>
+                İptal
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Filters and Controls */}
+      {/* Filters and Search */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -304,61 +299,21 @@ export default function MediaPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-3">
-              <Select value={selectedType} onValueChange={setSelectedType}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Tür seç" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fileTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type === "Tümü"
-                        ? "Tümü"
-                        : type === "image"
-                          ? "Resim"
-                          : type === "video"
-                            ? "Video"
-                            : type === "document"
-                              ? "Belge"
-                              : type === "audio"
-                                ? "Ses"
-                                : "Arşiv"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Sırala" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sortOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="flex border border-gray-200 dark:border-gray-700 rounded-lg">
-                <Button
-                  variant={viewMode === "grid" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("grid")}
-                  className="rounded-r-none"
-                >
-                  <Grid3X3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === "list" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("list")}
-                  className="rounded-l-none"
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === "grid" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("grid")}
+              >
+                <Grid3X3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("list")}
+              >
+                <List className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
@@ -369,86 +324,128 @@ export default function MediaPage() {
                 {selectedFiles.length} dosya seçildi
               </span>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => handleBulkAction("download")}>
+                <Button size="sm" variant="outline">
                   <Download className="h-4 w-4 mr-1" />
                   İndir
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleBulkAction("copy")}>
-                  <Copy className="h-4 w-4 mr-1" />
-                  Kopyala
-                </Button>
-                <Button size="sm" variant="destructive" onClick={() => handleBulkAction("delete")}>
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Sil
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="destructive">
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Sil
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Seçili dosyaları silmek istediğinizden emin misiniz?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Bu işlem geri alınamaz. Dosyalar kalıcı olarak silinecektir.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>İptal</AlertDialogCancel>
+                      <AlertDialogAction 
+                        className="bg-red-600 hover:bg-red-700"
+                        onClick={handleBulkDelete}
+                      >
+                        Sil
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Media Grid/List */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <FolderOpen className="h-5 w-5" />
-              Medya Dosyaları ({filteredFiles.length})
-            </span>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={selectedFiles.length === filteredFiles.length && filteredFiles.length > 0}
-                onChange={toggleSelectAll}
-                className="rounded border-gray-300"
-              />
-              <span className="text-sm text-gray-500">Tümünü Seç</span>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredFiles.map((file, index) => (
-                <motion.div
-                  key={file.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                  className="group relative bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-200"
-                >
-                  <div className="absolute top-3 left-3 z-10">
+      {/* Media Files */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <Card key={index} className="animate-pulse">
+              <CardContent className="p-4">
+                <Skeleton className="h-32 w-full mb-2" />
+                <Skeleton className="h-4 w-3/4 mb-1" />
+                <Skeleton className="h-3 w-1/2" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="text-center text-red-500 dark:text-red-400">
+          {error}
+        </div>
+      ) : filteredFiles.length === 0 ? (
+        <div className="text-center text-gray-500 dark:text-gray-400">
+          Dosya bulunamadı.
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {filteredFiles.map((file, index) => (
+            <motion.div
+              key={file.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.05 }}
+            >
+              <Card className="hover:shadow-lg transition-shadow">
+                <CardContent className="p-4">
+                  <div className="relative group">
                     <input
                       type="checkbox"
                       checked={selectedFiles.includes(file.id)}
                       onChange={() => toggleFileSelection(file.id)}
-                      className="rounded border-gray-300"
+                      className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
                     />
-                  </div>
-
-                  <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden mb-3">
+                      {file.mime_type.startsWith("image/") ? (
+                        <img
+                          src={getImageUrl(file, 'original')}
+                          alt={file.alt_text || file.name}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl">
+                          {getFileTypeIcon(file.mime_type)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {file.name}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {formatFileSize(file.size)}
+                      </p>
+                      {file.width && file.height && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {file.width} × {file.height}
+                        </p>
+                      )}
+                    </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="bg-white/80 dark:bg-gray-800/80">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setFileDetailDialog(file)}>
+                        <DropdownMenuItem>
                           <Eye className="h-4 w-4 mr-2" />
                           Görüntüle
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleFileAction(file.id, "download")}>
+                        <DropdownMenuItem>
                           <Download className="h-4 w-4 mr-2" />
                           İndir
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleFileAction(file.id, "copy")}>
+                        <DropdownMenuItem onClick={() => copyToClipboard(file.url)}>
                           <Copy className="h-4 w-4 mr-2" />
                           URL Kopyala
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleFileAction(file.id, "edit")}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Düzenle
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <AlertDialog>
@@ -467,9 +464,9 @@ export default function MediaPage() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>İptal</AlertDialogCancel>
-                              <AlertDialogAction
+                              <AlertDialogAction 
                                 className="bg-red-600 hover:bg-red-700"
-                                onClick={() => handleFileAction(file.id, "delete")}
+                                onClick={() => handleDeleteFile(file.id)}
                               >
                                 Sil
                               </AlertDialogAction>
@@ -479,99 +476,49 @@ export default function MediaPage() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-
-                  <div className="aspect-video bg-gray-100 dark:bg-gray-700 rounded-t-lg flex items-center justify-center overflow-hidden">
-                    {file.type === "image" ? (
-                      <img src={file.url || "/placeholder.svg"} alt={file.alt} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2">
-                        {getFileIcon(file.type)}
-                        <span className="text-sm text-gray-500 dark:text-gray-400">{file.type.toUpperCase()}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-gray-900 dark:text-white truncate flex-1 mr-2">{file.name}</h4>
-                      {getFileTypeBadge(file.type)}
-                    </div>
-
-                    <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                      <div className="flex justify-between">
-                        <span>Boyut:</span>
-                        <span>{file.size}</span>
-                      </div>
-                      {file.dimensions && (
-                        <div className="flex justify-between">
-                          <span>Boyutlar:</span>
-                          <span>{file.dimensions}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span>Tarih:</span>
-                        <span>{formatDate(file.uploadDate)}</span>
-                      </div>
-                    </div>
-
-                    {file.usedIn.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Kullanıldığı yerler:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {file.usedIn.slice(0, 2).map((usage, idx) => (
-                            <Badge key={idx} variant="outline" className="text-xs">
-                              {usage}
-                            </Badge>
-                          ))}
-                          {file.usedIn.length > 2 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{file.usedIn.length - 2}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Seç
+                    <th className="px-6 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selectedFiles.length === filteredFiles.length && filteredFiles.length > 0}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300"
+                      />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Dosya
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Tür
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Boyut
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Boyutlar
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Tarih
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Kullanım
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       İşlemler
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredFiles.map((file, index) => (
-                    <motion.tr
-                      key={file.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: index * 0.05 }}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
+              </table>
+              <div className="max-h-96 overflow-y-auto">
+                <table className="w-full">
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredFiles.map((file) => (
+                    <tr key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
                           type="checkbox"
@@ -582,42 +529,37 @@ export default function MediaPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          {getFileIcon(file.type)}
+                          <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+                            {file.mime_type.startsWith("image/") ? (
+                              <img
+                                src={getImageUrl(file, 'original')}
+                                alt={file.alt_text || file.name}
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-lg">
+                                {getFileTypeIcon(file.mime_type)}
+                              </div>
+                            )}
+                          </div>
                           <div>
-                            <h4 className="font-medium text-gray-900 dark:text-white">{file.name}</h4>
-                            {file.dimensions && (
-                              <p className="text-sm text-gray-600 dark:text-gray-400">{file.dimensions}</p>
-                            )}
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {file.name}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {file.mime_type}
+                            </p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">{getFileTypeBadge(file.type)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                        {file.size}
+                        {formatFileSize(file.size)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {formatDate(file.uploadDate)}
-                        </div>
+                        {file.width && file.height ? `${file.width} × ${file.height}` : "-"}
                       </td>
-                      <td className="px-6 py-4">
-                        {file.usedIn.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {file.usedIn.slice(0, 2).map((usage, idx) => (
-                              <Badge key={idx} variant="outline" className="text-xs">
-                                {usage}
-                              </Badge>
-                            ))}
-                            {file.usedIn.length > 2 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{file.usedIn.length - 2}
-                              </Badge>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">Kullanılmıyor</span>
-                        )}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                        {new Date(file.created_at).toLocaleDateString("tr-TR")}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <DropdownMenu>
@@ -627,190 +569,61 @@ export default function MediaPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setFileDetailDialog(file)}>
+                            <DropdownMenuItem>
                               <Eye className="h-4 w-4 mr-2" />
                               Görüntüle
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleFileAction(file.id, "download")}>
+                            <DropdownMenuItem>
                               <Download className="h-4 w-4 mr-2" />
                               İndir
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleFileAction(file.id, "copy")}>
+                            <DropdownMenuItem onClick={() => copyToClipboard(file.url)}>
                               <Copy className="h-4 w-4 mr-2" />
                               URL Kopyala
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleFileAction(file.id, "delete")}>
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Sil
-                            </DropdownMenuItem>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Sil
+                                </DropdownMenuItem>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Dosyayı silmek istediğinizden emin misiniz?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Bu işlem geri alınamaz. Dosya kalıcı olarak silinecektir.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>İptal</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    className="bg-red-600 hover:bg-red-700"
+                                    onClick={() => handleDeleteFile(file.id)}
+                                  >
+                                    Sil
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
-                    </motion.tr>
+                    </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
-
-      {/* Upload Dialog */}
-      <Dialog open={uploadDialog} onOpenChange={setUploadDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Dosya Yükle</DialogTitle>
-            <DialogDescription>Resim, video, belge ve diğer dosyalarınızı yükleyin.</DialogDescription>
-          </DialogHeader>
-
-          <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              dragOver
-                ? "border-[hsl(135,100%,50%)] bg-green-50 dark:bg-green-900/20"
-                : "border-gray-300 dark:border-gray-600"
-            }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Dosyaları buraya sürükleyin</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">veya dosya seçmek için tıklayın</p>
-            <Button>Dosya Seç</Button>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
-              Desteklenen formatlar: JPG, PNG, GIF, MP4, PDF, ZIP (Maks. 50MB)
-            </p>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadDialog(false)}>
-              İptal
-            </Button>
-            <Button>Yükle</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* File Detail Dialog */}
-      <Dialog open={!!fileDetailDialog} onOpenChange={(open) => !open && setFileDetailDialog(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Dosya Detayları</DialogTitle>
-            <DialogDescription>{fileDetailDialog?.name} dosyasının detaylı bilgileri</DialogDescription>
-          </DialogHeader>
-
-          {fileDetailDialog && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
-                <div className="aspect-video bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden mb-4">
-                  {fileDetailDialog.type === "image" ? (
-                    <img
-                      src={fileDetailDialog.url || "/placeholder.svg"}
-                      alt={fileDetailDialog.alt}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      {getFileIcon(fileDetailDialog.type)}
-                      <span className="text-lg text-gray-500 dark:text-gray-400">
-                        {fileDetailDialog.type.toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="flex-1 bg-transparent">
-                    <Download className="h-4 w-4 mr-2" />
-                    İndir
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1 bg-transparent">
-                    <Copy className="h-4 w-4 mr-2" />
-                    URL Kopyala
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-medium mb-3">Dosya Bilgileri</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Dosya Adı:</span>
-                      <span className="font-medium">{fileDetailDialog.name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Tür:</span>
-                      {getFileTypeBadge(fileDetailDialog.type)}
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Boyut:</span>
-                      <span>{fileDetailDialog.size}</span>
-                    </div>
-                    {fileDetailDialog.dimensions && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Boyutlar:</span>
-                        <span>{fileDetailDialog.dimensions}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Yüklenme Tarihi:</span>
-                      <span>{formatDate(fileDetailDialog.uploadDate)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Alt Metin:</span>
-                      <span className="text-right max-w-48 truncate">{fileDetailDialog.alt}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-medium mb-3">Kullanım Alanları</h4>
-                  {fileDetailDialog.usedIn.length > 0 ? (
-                    <div className="space-y-2">
-                      {fileDetailDialog.usedIn.map((usage: string, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                          <File className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm">{usage}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Bu dosya henüz hiçbir yerde kullanılmıyor.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <h4 className="font-medium mb-3">URL</h4>
-                  <div className="flex gap-2">
-                    <Input
-                      value={`https://example.com/media/${fileDetailDialog.name}`}
-                      readOnly
-                      className="font-mono text-sm"
-                    />
-                    <Button size="sm" variant="outline">
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFileDetailDialog(null)}>
-              Kapat
-            </Button>
-            <Button variant="outline">
-              <Edit className="h-4 w-4 mr-2" />
-              Düzenle
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      )}
     </div>
   )
 }
+
+// Skeleton component for loading state
+const Skeleton = ({ className }: { className: string }) => (
+  <div className={`animate-pulse bg-gray-200 dark:bg-gray-700 rounded ${className}`}></div>
+)

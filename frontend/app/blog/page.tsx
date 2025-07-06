@@ -11,6 +11,7 @@ import { Footer } from "@/components/ui/footer"
 import { Pagination } from "@/components/ui/pagination"
 import { FilterTabs } from "@/components/ui/filter-tabs"
 import { ScrollReveal } from "@/components/ui/scroll-reveal"
+import { apiClient, getResponsiveImageUrl } from "@/lib/api"
 import type { BlogPost, Category } from "@/lib/api"
 import {
   BookOpen,
@@ -27,179 +28,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-// Mock data for development (replace with API calls)
-const mockCategories: Category[] = [
-  {
-    id: 0,
-    name: "Tümü",
-    slug: "all",
-    description: "",
-    color: "#64748b",
-    posts_count: 24,
-    created_at: "",
-    updated_at: "",
-  },
-  {
-    id: 1,
-    name: "Ön Muhasebe",
-    slug: "accounting",
-    description: "",
-    color: "#64748b",
-    posts_count: 8,
-    created_at: "",
-    updated_at: "",
-  },
-  {
-    id: 2,
-    name: "Barkod Sistemi",
-    slug: "barcode",
-    description: "",
-    color: "#64748b",
-    posts_count: 6,
-    created_at: "",
-    updated_at: "",
-  },
-  {
-    id: 3,
-    name: "Satış Noktası",
-    slug: "pos",
-    description: "",
-    color: "#64748b",
-    posts_count: 5,
-    created_at: "",
-    updated_at: "",
-  },
-  {
-    id: 4,
-    name: "Bulut Teknoloji",
-    slug: "cloud",
-    description: "",
-    color: "#64748b",
-    posts_count: 4,
-    created_at: "",
-    updated_at: "",
-  },
-  {
-    id: 5,
-    name: "Perakende",
-    slug: "retail",
-    description: "",
-    color: "#64748b",
-    posts_count: 3,
-    created_at: "",
-    updated_at: "",
-  },
-  {
-    id: 6,
-    name: "Başarı Hikayeleri",
-    slug: "success",
-    description: "",
-    color: "#64748b",
-    posts_count: 2,
-    created_at: "",
-    updated_at: "",
-  },
-]
-
-const mockPosts: BlogPost[] = [
-  {
-    id: 1,
-    title: "2024'te Küçük İşletmeler İçin Dijital Dönüşüm Stratejileri",
-    slug: "dijital-donusum-stratejileri-2024",
-    excerpt:
-      "Geleneksel işletmelerin modern teknolojilerle nasıl rekabet avantajı elde edebileceğini ve Easytrade ile dijital dönüşümlerini nasıl başlatabileceklerini detaylı olarak inceliyoruz. Dijital çağda ayakta kalmanın sırları burada.",
-    content: "",
-    featured_image: "/placeholder.svg?height=400&width=600",
-    category_id: 4,
-    category: { id: 4, name: "Bulut Teknoloji", slug: "cloud", color: "#64748b" },
-    author: {
-      id: 1,
-      name: "Ahmet Yılmaz",
-      email: "ahmet@easytrade.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-      bio: "Dijital Dönüşüm Uzmanı",
-    },
-    tags: [
-      { id: 1, name: "Dijital Dönüşüm", slug: "dijital-donusum" },
-      { id: 2, name: "KOBİ", slug: "kobi" },
-      { id: 3, name: "Teknoloji", slug: "teknoloji" },
-    ],
-    published_at: "2024-01-15T10:00:00Z",
-    read_time: 8,
-    views_count: 2300,
-    likes_count: 45,
-    comments_count: 12,
-    is_featured: true,
-    is_trending: true,
-    created_at: "2024-01-15T10:00:00Z",
-    updated_at: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: 2,
-    title: "Barkod Sistemi ile Stok Yönetiminde %90 Zaman Tasarrufu Nasıl Sağlanır?",
-    slug: "barkod-sistemi-stok-yonetimi",
-    excerpt:
-      "Manuel stok takibinden barkodlu sisteme geçen işletmelerin deneyimleri, karşılaştıkları zorluklar ve elde ettikleri verimlilik artışlarını gerçek verilerle analiz ediyoruz. Stok yönetiminde devrim yaratacak ipuçları.",
-    content: "",
-    featured_image: "/placeholder.svg?height=400&width=600",
-    category_id: 2,
-    category: { id: 2, name: "Barkod Sistemi", slug: "barcode", color: "#64748b" },
-    author: {
-      id: 2,
-      name: "Zeynep Kaya",
-      email: "zeynep@easytrade.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-      bio: "Stok Yönetimi Uzmanı",
-    },
-    tags: [
-      { id: 4, name: "Barkod", slug: "barkod" },
-      { id: 5, name: "Stok Yönetimi", slug: "stok-yonetimi" },
-      { id: 6, name: "Verimlilik", slug: "verimlilik" },
-    ],
-    published_at: "2024-01-12T10:00:00Z",
-    read_time: 6,
-    views_count: 1900,
-    likes_count: 38,
-    comments_count: 8,
-    is_featured: true,
-    is_trending: false,
-    created_at: "2024-01-12T10:00:00Z",
-    updated_at: "2024-01-12T10:00:00Z",
-  },
-  // Add more posts for pagination testing
-  ...Array.from({ length: 20 }, (_, i) => ({
-    id: i + 10,
-    title: `Blog Yazısı ${i + 3}: İşletmenizi Büyütecek Pratik İpuçları`,
-    slug: `blog-yazisi-${i + 3}`,
-    excerpt: `İşletmenizin büyümesi için gerekli olan ${i + 3} temel stratejiyi ve bunları nasıl uygulayabileceğinizi detaylı olarak açıklıyoruz. Uzman görüşleri ve gerçek deneyimlerle desteklenmiş içerik.`,
-    content: "",
-    featured_image: "/placeholder.svg?height=400&width=600",
-    category_id: (i % 6) + 1,
-    category: mockCategories[(i % 6) + 1],
-    author: {
-      id: (i % 4) + 1,
-      name: ["Ahmet Yılmaz", "Zeynep Kaya", "Mehmet Demir", "Ayşe Özkan"][i % 4],
-      email: `author${(i % 4) + 1}@easytrade.com`,
-      avatar: "/placeholder.svg?height=40&width=40",
-      bio: "Uzman",
-    },
-    tags: [
-      { id: i + 20, name: `Tag ${i + 1}`, slug: `tag-${i + 1}` },
-      { id: i + 21, name: `Tag ${i + 2}`, slug: `tag-${i + 2}` },
-    ],
-    published_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
-    read_time: Math.floor(Math.random() * 10) + 3,
-    views_count: Math.floor(Math.random() * 3000) + 500,
-    likes_count: Math.floor(Math.random() * 100) + 10,
-    comments_count: Math.floor(Math.random() * 30) + 2,
-    is_featured: i < 2,
-    is_trending: i < 5,
-    created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
-  })),
-]
-
-const POSTS_PER_PAGE = 8
+const POSTS_PER_PAGE = 12
 
 // Professional Counter Component with smooth animations
 const ProfessionalCounter = ({
@@ -420,14 +249,15 @@ const ProfessionalHeroText = () => {
 }
 
 export default function BlogPage() {
-  const [posts, setPosts] = useState<BlogPost[]>(mockPosts)
-  const [categories, setCategories] = useState<Category[]>(mockCategories)
+  const [posts, setPosts] = useState<BlogPost[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const [savedPosts, setSavedPosts] = useState<Set<number>>(new Set([1, 2]))
+  const [savedPosts, setSavedPosts] = useState<Set<number>>(new Set())
 
   const toggleSavedPost = (postId: number) => {
     const newSavedPosts = new Set(savedPosts)
@@ -438,6 +268,55 @@ export default function BlogPage() {
     }
     setSavedPosts(newSavedPosts)
   }
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        // Fetch categories
+        const categoriesRes = await apiClient.getCategories()
+        // Add "All" category
+        const allCategories = [
+          {
+            id: 0,
+            name: "Tümü",
+            slug: "all",
+            description: "",
+            color: "#64748b",
+            posts_count: 0,
+            created_at: "",
+            updated_at: "",
+          },
+          ...categoriesRes
+        ]
+        setCategories(allCategories)
+
+        // Fetch posts with pagination
+        const postsRes = await apiClient.getPosts({
+          page: currentPage,
+          per_page: POSTS_PER_PAGE,
+          category: selectedCategory === "all" ? undefined : selectedCategory,
+          search: searchQuery,
+        })
+        let postsArray: BlogPost[] = [];
+        if (postsRes && Array.isArray((postsRes as any).data)) {
+          postsArray = (postsRes as any).data;
+        } else if (postsRes && (postsRes as any).data && Array.isArray((postsRes as any).data.data)) {
+          postsArray = (postsRes as any).data.data;
+        }
+        setPosts(postsArray)
+      } catch (err) {
+        setError("Blog yazıları yüklenirken bir hata oluştu.")
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [currentPage, selectedCategory, searchQuery, activeFilter])
 
   const getFilteredPosts = () => {
     let filtered = posts.filter((post) => {
@@ -459,7 +338,11 @@ export default function BlogPage() {
         filtered = filtered.filter((post) => post.is_trending)
         break
       case "recent":
-        filtered = filtered.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
+        filtered = filtered.sort((a, b) => {
+          const dateA = a.published_at ? new Date(a.published_at).getTime() : 0
+          const dateB = b.published_at ? new Date(b.published_at).getTime() : 0
+          return dateB - dateA
+        })
         break
       case "featured":
         filtered = filtered.filter((post) => post.is_featured)
@@ -610,7 +493,7 @@ export default function BlogPage() {
                         <Card className="overflow-hidden border-0 shadow-lg hover:shadow-2xl hover:-translate-y-3 transition-all duration-500 bg-card rounded-3xl h-full flex flex-col group cursor-pointer">
                           <div className="relative overflow-hidden">
                             <img
-                              src={post.featured_image || "/placeholder.svg"}
+                              src={getResponsiveImageUrl({ url: post.featured_image || "/placeholder.svg" } as any, 400)}
                               alt={post.title}
                               className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-700"
                             />
@@ -677,7 +560,7 @@ export default function BlogPage() {
                                   <p className="text-lg font-semibold text-foreground">{post.author.name}</p>
                                   <div className="flex items-center gap-3 text-sm text-muted-foreground">
                                     <Calendar className="h-4 w-4" />
-                                    {new Date(post.published_at).toLocaleDateString("tr-TR")}
+                                    {post.published_at && new Date(post.published_at).toLocaleDateString("tr-TR")}
                                     <span>•</span>
                                     <Clock className="h-4 w-4" />
                                     {post.read_time} dk
@@ -707,6 +590,24 @@ export default function BlogPage() {
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-[hsl(135,100%,50%)]" />
+                </div>
+              ) : error ? (
+                <div className="text-center py-16">
+                  <BookOpen className="h-20 w-20 text-muted-foreground mx-auto mb-6" />
+                  <h3 className="text-2xl font-bold text-foreground mb-4">Yazı bulunamadı</h3>
+                  <p className="text-lg text-muted-foreground mb-6">{error}</p>
+                  <Button
+                    onClick={() => {
+                      setSelectedCategory("all")
+                      setActiveFilter("all")
+                      setSearchQuery("")
+                    }}
+                    variant="outline"
+                    className="rounded-2xl px-8 py-3"
+                    size="lg"
+                  >
+                    Tüm Yazıları Görüntüle
+                  </Button>
                 </div>
               ) : regularPosts.length === 0 && paginatedPosts.length === 0 ? (
                 <div className="text-center py-16">
@@ -742,9 +643,9 @@ export default function BlogPage() {
                           <Card className="overflow-hidden border-0 shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-500 bg-card rounded-2xl h-full flex flex-col group cursor-pointer">
                             <div className="relative overflow-hidden">
                               <img
-                                src={post.featured_image || "/placeholder.svg"}
+                                src={getResponsiveImageUrl({ url: post.featured_image || "/placeholder.svg" } as any, 300)}
                                 alt={post.title}
-                                className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-700"
+                                className="w-full h-32 object-cover group-hover:scale-110 transition-transform duration-700"
                               />
                               <div className="absolute top-3 left-3">
                                 <Badge className="bg-white/90 text-foreground border-0 rounded-xl px-3 py-1 text-xs font-medium backdrop-blur-sm">
@@ -808,7 +709,7 @@ export default function BlogPage() {
                                     <p className="text-sm font-semibold text-foreground">{post.author.name}</p>
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                       <Calendar className="h-3 w-3" />
-                                      {new Date(post.published_at).toLocaleDateString("tr-TR")}
+                                      {post.published_at && new Date(post.published_at).toLocaleDateString("tr-TR")}
                                     </div>
                                   </div>
                                 </div>
