@@ -27,6 +27,12 @@ import {
   Target,
 } from "lucide-react"
 import Link from "next/link"
+import { Swiper, SwiperSlide } from 'swiper/react'
+import { Navigation, Pagination as SwiperPagination, A11y } from 'swiper/modules'
+import 'swiper/css'
+import 'swiper/css/navigation'
+import 'swiper/css/pagination'
+
 
 const POSTS_PER_PAGE = 12
 
@@ -258,6 +264,37 @@ export default function BlogPage() {
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [savedPosts, setSavedPosts] = useState<Set<number>>(new Set())
+  const [pagination, setPagination] = useState<any>(null)
+  const [allFeaturedPosts, setAllFeaturedPosts] = useState<BlogPost[]>([])
+  // useState ile filterCounts ve setFilterCounts'u kaldır
+
+  // Animated background için pozisyonlar (SSR'da sabit, client'ta rastgele)
+  const [bgPositions, setBgPositions] = useState<{ left: number; top: number }[]>(
+    Array(6).fill({ left: 50, top: 50 }) // SSR'da sabit değer
+  );
+  useEffect(() => {
+    setBgPositions(
+      Array(6)
+        .fill(0)
+        .map(() => ({ left: Math.random() * 100, top: Math.random() * 100 }))
+    );
+  }, []);
+
+  // İlk yüklemeyi ayırt etmek için useRef
+  const isFirstLoad = useRef(true)
+
+  // savedPosts'u localStorage ile başlat
+  useEffect(() => {
+    const saved = localStorage.getItem("savedPosts")
+    if (saved) {
+      setSavedPosts(new Set(JSON.parse(saved)))
+    }
+  }, [])
+
+  // savedPosts değişince localStorage'a kaydet
+  useEffect(() => {
+    localStorage.setItem("savedPosts", JSON.stringify(Array.from(savedPosts)))
+  }, [savedPosts])
 
   const toggleSavedPost = (postId: number) => {
     const newSavedPosts = new Set(savedPosts)
@@ -269,42 +306,57 @@ export default function BlogPage() {
     setSavedPosts(newSavedPosts)
   }
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-
-        // Fetch categories
-        const categoriesRes = await apiClient.getCategories()
-        setCategories(categoriesRes)
-
-        // Fetch posts with pagination
-        const postsRes = await apiClient.getPosts({
+  // fetchData fonksiyonunu bir üst scope'a çıkar
+  const fetchData = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const cats = await apiClient.getCategories()
+      setCategories(cats)
+      let res: any
+      if (activeFilter === "featured") {
+        res = await apiClient.getPosts({
           page: currentPage,
           per_page: POSTS_PER_PAGE,
-          category: selectedCategory || undefined,
+          featured: true,
+          category: selectedCategory,
           search: searchQuery,
         })
-        
-        // API'den gelen veri yapısını doğru şekilde işle
-        // postsRes artık PaginatedResponse<BlogPost> tipinde
-        const postsArray = postsRes.data;
-        
-        setPosts(postsArray)
-      } catch (err) {
-        setError("Blog yazıları yüklenirken bir hata oluştu.")
-        console.error(err)
-      } finally {
-        setLoading(false)
+      } else if (activeFilter === "trending") {
+        res = await apiClient.getPosts({
+          page: currentPage,
+          per_page: POSTS_PER_PAGE,
+          trending: true,
+          category: selectedCategory,
+          search: searchQuery,
+        })
+      } else {
+        res = await apiClient.getPosts({
+          page: currentPage,
+          per_page: POSTS_PER_PAGE,
+          category: selectedCategory,
+          search: searchQuery,
+        })
       }
+      setPosts(res.data)
+      setPagination(res)
+      // fetchData fonksiyonunda setFilterCounts satırını kaldır
+    } catch (err: any) {
+      setError("Yazılar yüklenemedi.")
+      setPosts([])
+      setPagination(null)
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchData()
   }, [currentPage, selectedCategory, searchQuery, activeFilter])
 
   // Otomatik polling ile veri yenileme
   useEffect(() => {
+    if (searchQuery) return; // Arama yapılırken polling devre dışı
     let interval: NodeJS.Timeout | null = null;
     let isTabActive = true;
 
@@ -334,6 +386,7 @@ export default function BlogPage() {
               })
               const postsArray = postsRes.data;
               setPosts(postsArray)
+              setPagination(postsRes)
             } catch (err) {
               setError("Blog yazıları yüklenirken bir hata oluştu.")
               console.error(err)
@@ -342,13 +395,24 @@ export default function BlogPage() {
             }
           })();
         }
-      }, 20000) // 20 saniye
+      }, 600000) // 10 dakika
     }
     return () => {
       if (interval) clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [currentPage, selectedCategory, searchQuery, activeFilter])
+  }, [currentPage, selectedCategory, searchQuery, activeFilter]);
+
+  // Fetch all featured posts for homepage
+  useEffect(() => {
+    if (currentPage === 1 && !selectedCategory && activeFilter === "all") {
+      apiClient.getPosts({ featured: true, per_page: 4 }).then((res) => {
+        setAllFeaturedPosts(res.data)
+      })
+    } else {
+      setAllFeaturedPosts([])
+    }
+  }, [currentPage, selectedCategory, activeFilter])
 
   const getFilteredPosts = () => {
     let filtered = posts.filter((post) => {
@@ -384,29 +448,56 @@ export default function BlogPage() {
     return filtered
   }
 
-  const filteredPosts = getFilteredPosts()
-  const totalPages = Math.ceil(filteredPosts.length / POSTS_PER_PAGE)
-  const startIndex = (currentPage - 1) * POSTS_PER_PAGE
-  const paginatedPosts = filteredPosts.slice(startIndex, startIndex + POSTS_PER_PAGE)
+  // Pagination bilgisi API'den alınacak
+  const totalPages = pagination ? pagination.last_page : 1
+  const paginatedPosts = posts
 
-  const featuredPosts = paginatedPosts.filter((post) => post.is_featured)
-  const regularPosts = paginatedPosts.filter((post) => !post.is_featured)
+  const featuredPosts = currentPage === 1 && !selectedCategory && activeFilter === "all"
+    ? allFeaturedPosts
+    : paginatedPosts.filter((post) => post.is_featured)
+const regularPosts = paginatedPosts.filter((post) => !post.is_featured)
 
   const filterCounts = {
-    all: posts.length,
+    all: pagination ? pagination.total : posts.length,
     saved: savedPosts.size,
     trending: posts.filter((p) => p.is_trending).length,
     recent: posts.length,
     featured: posts.filter((p) => p.is_featured).length,
   }
 
+  // currentPage değiştiğinde yazıların başına scroll et (ilk yüklemede scroll olmasın)
+  // useEffect(() => {
+  //   if (isFirstLoad.current) {
+  //     isFirstLoad.current = false
+  //     return
+  //   }
+  //   const postsSection = document.querySelector("[data-posts-section]")
+  //   if (postsSection) {
+  //     postsSection.scrollIntoView({ behavior: "smooth", block: "start" })
+  //   }
+  // }, [currentPage])
+
+  // currentPage veya loading değiştiğinde, loading false olduğunda scroll et (ilk yüklemede scroll olmasın)
+  // useEffect(() => {
+  //   if (isFirstLoad.current) return
+  //   if (!loading) {
+  //     setTimeout(() => {
+  //       const postsSection = document.querySelector("[data-posts-section]")
+  //       if (postsSection) {
+  //         postsSection.scrollIntoView({ behavior: "smooth", block: "start" })
+  //       }
+  //     }, 100)
+  //   }
+  // }, [currentPage, loading])
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    // Yazıların başına scroll et
-    const postsSection = document.querySelector("[data-posts-section]")
-    if (postsSection) {
-      postsSection.scrollIntoView({ behavior: "smooth", block: "start" })
-    }
+    setTimeout(() => {
+      const postsSection = document.querySelector("[data-posts-section]")
+      if (postsSection) {
+        postsSection.scrollIntoView({ behavior: "smooth", block: "start" })
+      }
+    }, 100)
   }
 
   return (
@@ -437,13 +528,13 @@ export default function BlogPage() {
             <div className="absolute inset-0 bg-gradient-to-br from-[hsl(135,100%,98%)] via-blue-50/30 to-purple-50/20 dark:from-gray-900/50 dark:via-gray-800/30 dark:to-gray-700/20 rounded-3xl" />
             {/* Animated background elements */}
             <div className="absolute inset-0">
-              {[...Array(6)].map((_, i) => (
+              {bgPositions.map((pos, i) => (
                 <motion.div
                   key={i}
                   className="absolute w-32 h-32 bg-gradient-to-r from-[hsl(135,100%,50%)] to-blue-500 rounded-full opacity-5"
                   style={{
-                    left: `${Math.random() * 100}%`,
-                    top: `${Math.random() * 100}%`,
+                    left: `${pos.left}%`,
+                    top: `${pos.top}%`,
                   }}
                   animate={{
                     x: [0, 30, 0],
@@ -504,13 +595,16 @@ export default function BlogPage() {
               <h3 className="text-xl font-bold text-foreground">
                 {!selectedCategory ? "Tüm Yazılar" : categories.find((c) => c.slug === selectedCategory)?.name}
               </h3>
-              <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full">
-                {filteredPosts.length} yazı
-              </span>
+              {/* <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                {posts.length} yazı
+              </span> */}
             </div>
           </ScrollReveal>
+          {/* Scroll anchor tam başlık üstüne */}
+          <div data-posts-section style={{ scrollMarginTop: '90px' }}></div>
           {/* Featured Posts - 2 büyük kart */}
-          {!selectedCategory && activeFilter === "all" && featuredPosts.length > 0 && (
+          {/* Only show on homepage (first page, no filter, no category) */}
+          {!selectedCategory && activeFilter === "all" && featuredPosts.length > 0 && currentPage === 1 && (
             <ScrollReveal delay={0.4}>
               <section className="mb-6">
                 <div className="flex items-center gap-2 mb-6">
@@ -523,11 +617,21 @@ export default function BlogPage() {
                     <ScrollReveal key={post.id} delay={index * 0.1} direction="up">
                       <Link href={`/blog/${post.slug}`}>
                         <Card className="overflow-hidden border-0 shadow-lg hover:shadow-2xl hover:-translate-y-3 transition-all duration-500 bg-card rounded-3xl h-full flex flex-col group cursor-pointer">
-                          <div className="relative overflow-hidden">
+                          <div className="relative overflow-hidden" style={{ width: '100%', height: '256px' }}>
                             <img
-                              src={getResponsiveImageUrl({ url: post.featured_image || "/placeholder.svg" } as any, 400)}
+                              src={post.featured_image || '/placeholder.svg'}
                               alt={post.title}
-                              className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-700"
+                              style={{
+                                position: 'absolute',
+                                left: `${(typeof post.featured_image_position_x === 'number' ? post.featured_image_position_x : 0.5) * 100}%`,
+                                top: `${(typeof post.featured_image_position_y === 'number' ? post.featured_image_position_y : 0.5) * 100}%`,
+                                transform: `translate(-${(typeof post.featured_image_position_x === 'number' ? post.featured_image_position_x : 0.5) * 100}%, -${(typeof post.featured_image_position_y === 'number' ? post.featured_image_position_y : 0.5) * 100}%) scale(${typeof post.featured_image_scale === 'number' ? post.featured_image_scale : 1})`,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                transition: 'transform 0.7s',
+                              }}
+                              className="group-hover:scale-110 transition-transform duration-700"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
                             <div className="absolute top-6 left-6 flex gap-3">
@@ -580,22 +684,25 @@ export default function BlogPage() {
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-4">
                                 <Avatar className="h-12 w-12">
-                                  <AvatarImage src={post.author.avatar || "/placeholder.svg"} />
+                                  <AvatarImage src={post.author?.avatar || '/placeholder-user.jpg'} />
                                   <AvatarFallback>
-                                    {post.author.name
-                                      .split(" ")
-                                      .map((n) => n[0])
-                                      .join("")}
+                                    {post.author?.name
+                                      ? post.author.name.split(' ').map((n) => n[0]).join('')
+                                      : '??'}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div>
-                                  <p className="text-lg font-semibold text-foreground">{post.author.name}</p>
+                                  <p className="text-lg font-semibold text-foreground">
+                                    {post.author?.name || 'Bilinmeyen Yazar'}
+                                  </p>
                                   <div className="flex items-center gap-3 text-sm text-muted-foreground">
                                     <Calendar className="h-4 w-4" />
-                                    {post.published_at && new Date(post.published_at).toLocaleDateString("tr-TR")}
+                                    {post.published_at
+                                      ? new Date(post.published_at).toLocaleDateString('tr-TR')
+                                      : '-'}
                                     <span>•</span>
                                     <Clock className="h-4 w-4" />
-                                    {post.read_time} dk
+                                    {post.read_time ? `${post.read_time} dk` : '-'}
                                   </div>
                                 </div>
                               </div>
@@ -616,49 +723,23 @@ export default function BlogPage() {
               </section>
             </ScrollReveal>
           )}
-          {/* Regular Posts - 3 küçük kart per row */}
-          <ScrollReveal delay={0.6}>
-            <section data-posts-section>
+          {/* Main Post List */}
+          {/*
+            Eğer aktif filtre 'featured' ise, ana post listesi (posts) doğrudan gösterilmeli.
+            Diğer tüm filtrelerde ve anasayfada, ana post listesi (posts) gösterilmeli.
+            Sadece anasayfada üstte öne çıkanlar bölümü ayrıca gösterilir.
+          */}
+          <ScrollReveal delay={0.5}>
+            <div>
               {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-[hsl(135,100%,50%)]" />
+                <div className="text-center py-12">
+                  <Loader2 className="animate-spin mx-auto mb-2" />
+                  Yükleniyor...
                 </div>
               ) : error ? (
-                <div className="text-center py-16">
-                  <BookOpen className="h-20 w-20 text-muted-foreground mx-auto mb-6" />
-                  <h3 className="text-2xl font-bold text-foreground mb-4">Yazı bulunamadı</h3>
-                  <p className="text-lg text-muted-foreground mb-6">{error}</p>
-                  <Button
-                    onClick={() => {
-                      setSelectedCategory("")
-                      setActiveFilter("all")
-                      setSearchQuery("")
-                    }}
-                    variant="outline"
-                    className="rounded-2xl px-8 py-3"
-                    size="lg"
-                  >
-                    Tüm Yazıları Görüntüle
-                  </Button>
-                </div>
-              ) : regularPosts.length === 0 && paginatedPosts.length === 0 ? (
-                <div className="text-center py-16">
-                  <BookOpen className="h-20 w-20 text-muted-foreground mx-auto mb-6" />
-                  <h3 className="text-2xl font-bold text-foreground mb-4">Yazı bulunamadı</h3>
-                  <p className="text-lg text-muted-foreground mb-6">Arama kriterlerinizi değiştirmeyi deneyin.</p>
-                  <Button
-                    onClick={() => {
-                      setSelectedCategory("")
-                      setActiveFilter("all")
-                      setSearchQuery("")
-                    }}
-                    variant="outline"
-                    className="rounded-2xl px-8 py-3"
-                    size="lg"
-                  >
-                    Tüm Yazıları Görüntüle
-                  </Button>
-                </div>
+                <div className="text-center py-12 text-red-500">{error}</div>
+              ) : getFilteredPosts().length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">Hiç yazı bulunamadı.</div>
               ) : (
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -669,16 +750,35 @@ export default function BlogPage() {
                     transition={{ duration: 0.3 }}
                     className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                   >
-                    {(featuredPosts.length === 0 ? paginatedPosts : regularPosts).map((post, index) => (
+                    {getFilteredPosts().map((post, index) => (
                       <ScrollReveal key={post.id} delay={index * 0.05} direction="up">
                         <Link href={`/blog/${post.slug}`}>
                           <Card className="overflow-hidden border-0 shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-500 bg-card rounded-2xl h-full flex flex-col group cursor-pointer">
-                            <div className="relative overflow-hidden">
-                              <img
-                                src={getResponsiveImageUrl({ url: post.featured_image || "/placeholder.svg" } as any, 300)}
-                                alt={post.title}
-                                className="w-full h-32 object-cover group-hover:scale-110 transition-transform duration-700"
-                              />
+                            {/* Görsel ve overlay'ler tek parentta */}
+                            <div className="relative overflow-hidden" style={{ width: '100%', height: '180px' }}>
+                              {typeof post.featured_image_position_x === 'number' && typeof post.featured_image_position_y === 'number' && typeof post.featured_image_scale === 'number' ? (
+                                <img
+                                  src={getResponsiveImageUrl({ url: post.featured_image || "/placeholder.svg" } as any, 300)}
+                                  alt={post.title}
+                                  style={{
+                                    position: 'absolute',
+                                    left: `${(post.featured_image_position_x ?? 0.5) * 100}%`,
+                                    top: `${(post.featured_image_position_y ?? 0.5) * 100}%`,
+                                    transform: `translate(-${(post.featured_image_position_x ?? 0.5) * 100}%, -${(post.featured_image_position_y ?? 0.5) * 100}%) scale(${post.featured_image_scale ?? 1})`,
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    transition: 'transform 0.7s',
+                                  }}
+                                  className="group-hover:scale-110 transition-transform duration-700"
+                                />
+                              ) : (
+                                <img
+                                  src={getResponsiveImageUrl({ url: post.featured_image || "/placeholder.svg" } as any, 300)}
+                                  alt={post.title}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                />
+                              )}
                               <div className="absolute top-3 left-3">
                                 <Badge className="bg-white/90 text-foreground border-0 rounded-xl px-3 py-1 text-xs font-medium backdrop-blur-sm">
                                   {post.category.name}
@@ -708,6 +808,7 @@ export default function BlogPage() {
                                 </div>
                               )}
                             </div>
+                            {/* Diğer CardHeader, CardContent vs. burada */}
 
                             <CardHeader className="p-5 pb-3 flex-1">
                               <div className="flex flex-wrap gap-1 mb-3">
@@ -729,25 +830,28 @@ export default function BlogPage() {
                               <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                   <Avatar className="h-7 w-7">
-                                    <AvatarImage src={post.author.avatar || "/placeholder.svg"} />
+                                    <AvatarImage src={post.author?.avatar || '/placeholder-user.jpg'} />
                                     <AvatarFallback className="text-xs">
-                                      {post.author.name
-                                        .split(" ")
-                                        .map((n) => n[0])
-                                        .join("")}
+                                      {post.author?.name
+                                        ? post.author.name.split(' ').map((n) => n[0]).join('')
+                                        : '??'}
                                     </AvatarFallback>
                                   </Avatar>
                                   <div>
-                                    <p className="text-sm font-semibold text-foreground">{post.author.name}</p>
+                                    <p className="text-sm font-semibold text-foreground">
+                                      {post.author?.name || 'Bilinmeyen Yazar'}
+                                    </p>
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                       <Calendar className="h-3 w-3" />
-                                      {post.published_at && new Date(post.published_at).toLocaleDateString("tr-TR")}
+                                      {post.published_at
+                                        ? new Date(post.published_at).toLocaleDateString('tr-TR')
+                                        : '-'}
                                     </div>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                   <Clock className="h-3 w-3" />
-                                  {post.read_time} dk
+                                  {post.read_time ? `${post.read_time} dk` : '-'}
                                 </div>
                               </div>
 
@@ -774,7 +878,7 @@ export default function BlogPage() {
                   </motion.div>
                 </AnimatePresence>
               )}
-            </section>
+            </div>
           </ScrollReveal>
           {/* Pagination */}
           {totalPages > 1 && (
@@ -816,3 +920,4 @@ export default function BlogPage() {
     </div>
   )
 }
+

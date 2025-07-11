@@ -75,18 +75,7 @@ const sidebarItems = [
     icon: Tag,
     badge: null,
   },
-  {
-    title: "Yorumlar",
-    href: "/admin/comments",
-    icon: MessageSquare,
-    badge: null,
-  },
-  {
-    title: "Kullanıcılar",
-    href: "/admin/users",
-    icon: Users,
-    badge: null,
-  },
+  // Yorumlar ve Kullanıcılar kaldırıldı
   {
     title: "Medya",
     href: "/admin/media",
@@ -165,10 +154,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         setUser(currentUser)
 
         // İstatistikleri yükle
-        const [posts, comments] = await Promise.all([
+        const [postsRes, comments] = await Promise.all([
           apiClient.getAdminPosts({ per_page: 100 }),
           apiClient.getAllComments(),
         ])
+        const posts = postsRes.data;
 
         const publishedPosts = posts.filter(p => p.status === "published").length
         const featuredPosts = posts.filter(p => p.is_featured).length

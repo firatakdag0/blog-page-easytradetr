@@ -162,7 +162,6 @@
 /* Prose styling for blog content */
 .prose {
   @apply text-foreground;
-  font-size: 0.9rem; /* Blog içeriği için küçük font */
   line-height: 1.6;
 }
 

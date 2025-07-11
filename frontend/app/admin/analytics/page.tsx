@@ -24,6 +24,7 @@ import {
   Target,
   Activity,
 } from "lucide-react"
+import { apiClient } from "@/lib/api"
 
 // Mock analytics data
 const analyticsData = {
@@ -97,13 +98,47 @@ const analyticsData = {
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("30d")
+  const [stats, setStats] = useState({
+    totalViews: 0,
+    uniqueVisitors: 0, // Gerçek veri yoksa 0 bırak
+    avgSessionDuration: "-",
+    bounceRate: 0,
+    totalPosts: 0,
+    totalComments: 0,
+    totalLikes: 0,
+    featuredPosts: 0,
+    trendingPosts: 0,
+  })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => setLoading(false), 1000)
-    return () => clearTimeout(timer)
-  }, [timeRange])
+    const fetchAnalytics = async () => {
+      setLoading(true)
+      try {
+        const [postsRes, comments] = await Promise.all([
+          apiClient.getAdminPosts({ per_page: 100 }),
+          apiClient.getAllComments(),
+        ])
+        const posts = postsRes.data
+        setStats({
+          totalViews: posts.reduce((sum, p) => sum + p.views_count, 0),
+          uniqueVisitors: 0, // Gerçek veri yoksa 0 bırak
+          avgSessionDuration: "-",
+          bounceRate: 0,
+          totalPosts: posts.length,
+          totalComments: comments.length,
+          totalLikes: posts.reduce((sum, p) => sum + p.likes_count, 0),
+          featuredPosts: posts.filter(p => p.is_featured).length,
+          trendingPosts: posts.filter(p => p.is_trending).length,
+        })
+      } catch (e) {
+        // hata yönetimi
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAnalytics()
+  }, [])
 
   const getTrendIcon = (change: number) => {
     return change > 0 ? (
@@ -172,7 +207,7 @@ export default function AnalyticsPage() {
         {[
           {
             title: "Toplam Görüntülenme",
-            value: analyticsData.overview.totalViews.toLocaleString(),
+            value: stats.totalViews.toLocaleString(),
             change: analyticsData.trends.views.change,
             icon: Eye,
             color: "text-blue-500",
@@ -180,7 +215,7 @@ export default function AnalyticsPage() {
           },
           {
             title: "Benzersiz Ziyaretçi",
-            value: analyticsData.overview.uniqueVisitors.toLocaleString(),
+            value: stats.uniqueVisitors.toLocaleString(),
             change: analyticsData.trends.visitors.change,
             icon: Users,
             color: "text-green-500",

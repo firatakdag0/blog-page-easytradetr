@@ -31,7 +31,8 @@ import {
   Star,
   Zap,
   Target,
-  Award
+  Award,
+  RefreshCw
 } from "lucide-react"
 
 export default function AdminDashboard() {
@@ -50,48 +51,61 @@ export default function AdminDashboard() {
     trendingPosts: 0
   })
 
+  // fetchData fonksiyonunu useEffect dışına çıkar
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      // Posts
+      const postsApiRes = await apiClient.getAdminPosts({ per_page: 50 })
+      const postsRes = postsApiRes.data
+      const postsPagination = postsApiRes.pagination
+      setRecentPosts(postsRes.slice(0, 5))
+      setPostCount(postsPagination?.all_total || postsPagination?.total || postsRes.length)
+      // Categories
+      const categoriesRes = await apiClient.getCategories()
+      setCategoryCount(categoriesRes.length)
+      // Comments
+      const commentsRes = await apiClient.getAllComments()
+      setCommentCount(commentsRes.length)
+      // İstatistikleri hesapla
+      const publishedPosts = postsRes.filter(p => p.status === "published").length
+      const draftPosts = postsRes.filter(p => p.status === "draft").length
+      const featuredPosts = postsRes.filter(p => p.is_featured).length
+      const trendingPosts = postsRes.filter(p => p.is_trending).length
+      const totalViews = postsRes.reduce((sum, p) => sum + p.views_count, 0)
+      const totalLikes = postsRes.reduce((sum, p) => sum + p.likes_count, 0)
+      const totalComments = postsRes.reduce((sum, p) => sum + p.comments_count, 0)
+      setStats({
+        totalViews,
+        totalLikes,
+        totalComments,
+        publishedPosts,
+        draftPosts,
+        featuredPosts,
+        trendingPosts
+      })
+    } catch (err) {
+      console.error("Dashboard data fetch error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // useEffect ile ilk yüklemede ve pencere odağı değiştiğinde verileri çek
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      try {
-        // Posts
-        const postsRes = await apiClient.getAdminPosts({ per_page: 50 })
-        setRecentPosts(postsRes.slice(0, 5))
-        setPostCount(postsRes.length)
-        
-        // Categories
-        const categoriesRes = await apiClient.getCategories()
-        setCategoryCount(categoriesRes.length)
-        
-        // Comments
-        const commentsRes = await apiClient.getAllComments()
-        setCommentCount(commentsRes.length)
-
-        // İstatistikleri hesapla
-        const publishedPosts = postsRes.filter(p => p.status === "published").length
-        const draftPosts = postsRes.filter(p => p.status === "draft").length
-        const featuredPosts = postsRes.filter(p => p.is_featured).length
-        const trendingPosts = postsRes.filter(p => p.is_trending).length
-        const totalViews = postsRes.reduce((sum, p) => sum + p.views_count, 0)
-        const totalLikes = postsRes.reduce((sum, p) => sum + p.likes_count, 0)
-        const totalComments = postsRes.reduce((sum, p) => sum + p.comments_count, 0)
-
-        setStats({
-          totalViews,
-          totalLikes,
-          totalComments,
-          publishedPosts,
-          draftPosts,
-          featuredPosts,
-          trendingPosts
-        })
-      } catch (err) {
-        console.error("Dashboard data fetch error:", err)
-      } finally {
-        setLoading(false)
+    fetchData()
+    const onFocus = () => {
+      if (localStorage.getItem('dashboardNeedsRefresh')) {
+        fetchData()
+        localStorage.removeItem('dashboardNeedsRefresh')
       }
     }
-    fetchData()
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
   }, [])
 
   const getStatusBadge = (status: string) => {
@@ -187,7 +201,11 @@ export default function AdminDashboard() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <Button className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black" asChild>
+          <Button variant="outline" onClick={fetchData} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Yenile
+          </Button>
+          <Button className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black ml-3" asChild>
             <Link href="/admin/posts/new">
               <Plus className="h-4 w-4 mr-2" />
               Yeni İçerik

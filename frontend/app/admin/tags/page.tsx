@@ -30,6 +30,7 @@ import {
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Tag } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
+import { RefreshButton } from "@/components/ui/refresh-button"
 
 interface Tag {
   id: number
@@ -172,10 +173,13 @@ export default function TagsPage() {
             Blog içeriklerinizi kategorize etmek için etiketleri yönetin.
           </p>
         </div>
-        <Button onClick={handleAdd} className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black">
-          <Plus className="w-4 h-4 mr-2" />
-          Yeni Etiket
-        </Button>
+        <div className="flex items-center gap-3">
+          <RefreshButton onClick={fetchTags} loading={loading} />
+          <Button onClick={handleAdd} className="bg-[hsl(135,100%,50%)] hover:bg-[hsl(135,100%,45%)] text-black">
+            <Plus className="w-4 h-4 mr-2" />
+            Yeni Etiket
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

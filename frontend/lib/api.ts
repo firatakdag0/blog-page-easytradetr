@@ -165,6 +165,9 @@ export interface BlogPost {
   meta_description?: string
   created_at: string
   updated_at: string
+  featured_image_position_x?: number | null;
+  featured_image_position_y?: number | null;
+  featured_image_scale?: number | null;
 }
 
 export interface CreatePostData {
@@ -183,6 +186,9 @@ export interface CreatePostData {
   read_time: number
   meta_title: string
   meta_description: string
+  featured_image_position_x?: number | null;
+  featured_image_position_y?: number | null;
+  featured_image_scale?: number | null;
 }
 
 export interface Category {
@@ -417,7 +423,7 @@ class ApiClient {
     status?: string
     sort_by?: string
     sort_order?: "asc" | "desc"
-  }): Promise<BlogPost[]> {
+  }): Promise<{ data: BlogPost[]; pagination: any }> {
     const searchParams = new URLSearchParams()
 
     if (params?.page) searchParams.append("page", params.page.toString())
@@ -429,8 +435,8 @@ class ApiClient {
     if (params?.sort_order) searchParams.append("sort_order", params.sort_order)
 
     const query = searchParams.toString()
-    const response = await this.request<{ success: boolean; data: BlogPost[] }>(`/admin/posts${query ? `?${query}` : ""}`)
-    return response.data
+    const response = await this.request<{ success: boolean; data: BlogPost[]; pagination: any }>(`/admin/posts${query ? `?${query}` : ""}`)
+    return { data: response.data, pagination: response.pagination }
   }
 
   async getPost(id: number): Promise<BlogPost> {
@@ -459,6 +465,10 @@ class ApiClient {
     return this.request<{ message: string }>(`/admin/posts/${id}`, {
       method: "DELETE",
     })
+  }
+
+  async getPrevNextPosts(slug: string): Promise<{ prev: BlogPost | null; next: BlogPost | null }> {
+    return this.request<{ prev: BlogPost | null; next: BlogPost | null }>(`/posts/prev-next/${slug}`)
   }
 
   // Categories
@@ -623,7 +633,7 @@ class ApiClient {
     if (altText) formData.append('alt_text', altText)
     if (caption) formData.append('caption', caption)
 
-    const response = await this.request<{ success: boolean; data: MediaFile }>('/media/upload', {
+    const response = await this.request<{ success: boolean; data: MediaFile }>('/admin/media/upload', {
       method: 'POST',
       headers: {
         // FormData için Content-Type header'ını kaldırıyoruz

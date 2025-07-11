@@ -37,6 +37,8 @@ Route::prefix('v1')->group(function () {
     Route::get('/posts', [PostController::class, 'index']);
     Route::get('/posts/{post}', [PostController::class, 'show']);
     Route::get('/posts/slug/{slug}', [PostController::class, 'showBySlug']);
+    Route::get('/posts/prev-next/{slug}', [PostController::class, 'getPrevNextPosts']);
+    Route::get('/posts/check-slug-unique', [PostController::class, 'checkSlugUnique']);
 
     // Tags
     Route::get('/tags', [TagController::class, 'index']);

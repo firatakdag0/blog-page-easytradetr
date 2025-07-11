@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { motion } from "framer-motion"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import AnimatedGradientText from "@/components/ui/animated-gradient-text"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
@@ -42,6 +43,10 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { apiClient, Category, MediaFile, formatDateTimeForAPI, Author, getImageUrl } from "@/lib/api"
+import dynamic from "next/dynamic"
+const SimpleMDE = dynamic(() => import("react-simplemde-editor"), { ssr: false }) as any
+import "easymde/dist/easymde.min.css"
+import { ImagePositionEditor } from "@/components/ui/image-position-editor";
 
 export default function NewPostPage() {
   const [title, setTitle] = useState("")
@@ -50,7 +55,7 @@ export default function NewPostPage() {
   const [content, setContent] = useState("")
   const [category, setCategory] = useState("")
   const [author, setAuthor] = useState("")
-  const [tags, setTags] = useState<{ id: number; name: string }[]>([])
+  const [tags, setTags] = useState<{ id?: number; name: string }[]>([])
   const [newTag, setNewTag] = useState("")
   const [featuredImage, setFeaturedImage] = useState("")
   const [isFeatured, setIsFeatured] = useState(false)
@@ -74,51 +79,9 @@ export default function NewPostPage() {
   const [mediaViewMode, setMediaViewMode] = useState<"grid" | "list">("grid")
   const [selectedMedia, setSelectedMedia] = useState<MediaFile | null>(null)
 
-  useEffect(() => {
-    // Kategorileri çek
-    apiClient.getCategories().then(setCategories)
-    // Yazarları çek
-    apiClient.getAuthors().then((response) => {
-      const authorsArray = (response as any)?.data || []
-      setAuthors(authorsArray)
-    })
-  }, [])
-
-  // Medya dosyalarını yükle
-  const fetchMediaFiles = async () => {
-    setMediaLoading(true)
-    try {
-      const response = await apiClient.getMedia({
-        search: mediaSearchQuery,
-        type: "image",
-        per_page: 50
-      })
-      setMediaFiles(response.data)
-    } catch (err: any) {
-      console.error("Media fetch error:", err)
-      toast.error("Medya dosyaları yüklenemedi")
-    } finally {
-      setMediaLoading(false)
-    }
-  }
-
-  // Medya seçici açıldığında dosyaları yükle
-  useEffect(() => {
-    if (isMediaSelectorOpen) {
-      fetchMediaFiles()
-    }
-  }, [isMediaSelectorOpen])
-
-  // Arama değiştiğinde medya dosyalarını yeniden yükle
-  useEffect(() => {
-    if (isMediaSelectorOpen) {
-      const timeoutId = setTimeout(() => {
-        fetchMediaFiles()
-      }, 500)
-
-      return () => clearTimeout(timeoutId)
-    }
-  }, [mediaSearchQuery, isMediaSelectorOpen])
+  // Tag state'lerini güncelle
+  const [allTags, setAllTags] = useState<{ id: number; name: string }[]>([])
+  // const [newTag, setNewTag] = useState("") // This line is removed
 
   // Auto-generate slug from title
   const generateSlug = (title: string) => {
@@ -137,11 +100,13 @@ export default function NewPostPage() {
     }
   }
 
-  const addTag = () => {
-    if (newTag.trim() && !tags.some((tag) => tag.name === newTag.trim())) {
-      setTags([...tags, { id: tags.length + 1, name: newTag.trim() }])
-      setNewTag("")
+  const addTag = (tagName?: string) => {
+    const name = (tagName ?? newTag).trim()
+    if (!name) return
+    if (!tags.some((tag) => tag.name.toLowerCase() === name.toLowerCase())) {
+      setTags([...tags, { name }])
     }
+    setNewTag("")
   }
 
   const removeTag = (tagToRemove: string) => {
@@ -183,6 +148,11 @@ export default function NewPostPage() {
         return
       }
       
+      // Eğer yayın durumu 'published' ve yayın tarihi boşsa, şimdi ile doldur
+      let finalPublishedAt = publishDate
+      if (saveStatus === "published" && !publishDate) {
+        finalPublishedAt = new Date().toISOString().slice(0, 16) // yyyy-MM-ddTHH:mm
+      }
       const postData = {
         title,
         slug,
@@ -190,15 +160,18 @@ export default function NewPostPage() {
         content,
         category_id: selectedCategory.id,
         author_id: selectedAuthor.id,
-        tags: tags.map((tag) => tag.name),
+        tags: tags.map(tag => tag.name),
         featured_image: featuredImage,
         is_featured: isFeatured,
         is_trending: isTrending,
         status: saveStatus,
-        published_at: publishDate ? formatDateTimeForAPI(publishDate) : null,
+        published_at: finalPublishedAt ? formatDateTimeForAPI(finalPublishedAt) : null,
         read_time: readTime,
         meta_title: metaTitle,
         meta_description: metaDescription,
+        featured_image_position_x: imgPos.x,
+        featured_image_position_y: imgPos.y,
+        featured_image_scale: imgScale,
       }
       await apiClient.createPost(postData)
       
@@ -216,6 +189,146 @@ export default function NewPostPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  useEffect(() => {
+    // Kategorileri çek
+    apiClient.getCategories().then(setCategories)
+    // Yazarları çek
+    apiClient.getAuthors().then((response) => {
+      const authorsArray = (response as any)?.data || []
+      setAuthors(authorsArray)
+    })
+    apiClient.getTags().then((data) => setAllTags(data))
+  }, [])
+
+  const [slugAvailable, setSlugAvailable] = useState(true);
+  const slugCheckTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!slug) return;
+    if (slugCheckTimeout.current) clearTimeout(slugCheckTimeout.current);
+    slugCheckTimeout.current = setTimeout(async () => {
+      try {
+        // Slug kontrol endpoint'i: /api/v1/posts/slug/{slug}
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"}/posts/slug/${slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          // Eğer data.success true ve data.data varsa, slug kullanılıyor demektir
+          if (data.success && data.data) {
+            setSlugAvailable(false);
+            toast.error("Bu slug müsait değil. Lütfen başka bir slug girin.");
+          } else {
+            setSlugAvailable(true);
+          }
+        } else {
+          setSlugAvailable(true);
+        }
+      } catch {
+        setSlugAvailable(true);
+      }
+    }, 500);
+    return () => {
+      if (slugCheckTimeout.current) clearTimeout(slugCheckTimeout.current);
+    };
+  }, [slug]);
+
+  // Medya dosyalarını yükle
+  const fetchMediaFiles = async () => {
+    setMediaLoading(true)
+    try {
+      const response = await apiClient.getMedia({
+        search: mediaSearchQuery,
+        type: "image",
+        per_page: 50
+      })
+      setMediaFiles(response.data)
+    } catch (err: any) {
+      console.error("Media fetch error:", err)
+      toast.error("Medya dosyaları yüklenemedi")
+    } finally {
+      setMediaLoading(false)
+    }
+  }
+
+  // Medya seçici açıldığında dosyaları yükle
+  useEffect(() => {
+    if (isMediaSelectorOpen) {
+      fetchMediaFiles()
+    }
+  }, [isMediaSelectorOpen])
+
+  // Arama değiştiğinde medya dosyalarını yeniden yükle
+  useEffect(() => {
+    if (isMediaSelectorOpen) {
+      const timeoutId = setTimeout(() => {
+        fetchMediaFiles()
+      }, 500)
+
+      return () => clearTimeout(timeoutId)
+    }
+  }, [mediaSearchQuery, isMediaSelectorOpen])
+
+  // Kategori ve yazar seçeneklerini memoize et
+  const categoryOptions = useMemo(() =>
+    categories.map(cat => (
+      <SelectItem key={cat.id} value={cat.id.toString()}>
+        {cat.name}
+      </SelectItem>
+    ))
+  , [categories]);
+
+  const authorOptions = useMemo(() =>
+    authors.map(auth => (
+      <SelectItem key={auth.id} value={auth.id.toString()}>
+        {auth.first_name} {auth.last_name}
+      </SelectItem>
+    ))
+  , [authors]);
+
+  // State'ler:
+  const [imgPos, setImgPos] = useState({ x: 0.5, y: 0.5 }); // 0-1 arası, merkezde başla
+  const [imgScale, setImgScale] = useState(1);
+  const dragRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  const last = useRef({ x: 0, y: 0 });
+
+  // Sürükleme eventleri
+  const handlePointerDown = (e: React.PointerEvent) => {
+    dragging.current = true;
+    last.current = { x: e.clientX, y: e.clientY };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragging.current || !dragRef.current) return;
+    const rect = dragRef.current.getBoundingClientRect();
+    const dx = (e.clientX - last.current.x) / rect.width;
+    const dy = (e.clientY - last.current.y) / rect.height;
+    setImgPos(prev => {
+      let nx = Math.max(0, Math.min(1, prev.x + dx));
+      let ny = Math.max(0, Math.min(1, prev.y + dy));
+      last.current = { x: e.clientX, y: e.clientY };
+      return { x: nx, y: ny };
+    });
+  };
+  const handlePointerUp = (e: React.PointerEvent) => {
+    dragging.current = false;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+
+  // Kart görseli için stil
+  function getImageTransform(x: number, y: number, scale: number) {
+    return {
+      position: "absolute" as const,
+      left: 0,
+      top: 0,
+      width: `360px`,
+      height: `128px`,
+      transform: `translate(${-x * 360 * scale + 180}px, ${-y * 128 * scale + 64}px) scale(${scale})`,
+      transition: dragging.current ? "none" : "transform 0.2s cubic-bezier(.4,2,.6,1)",
+      cursor: dragging.current ? "grabbing" : "grab",
+      userSelect: "none" as const,
+    };
   }
 
   return (
@@ -278,7 +391,7 @@ export default function NewPostPage() {
                     value={slug}
                     onChange={(e) => setSlug(e.target.value)}
                     placeholder="url-slug"
-                    className="mt-1"
+                    className={`mt-1 ${!slugAvailable ? 'border-red-500' : ''}`}
                   />
                   <p className="text-xs text-gray-500 mt-1">URL: /blog/{slug || "url-slug"}</p>
                 </div>
@@ -310,13 +423,23 @@ export default function NewPostPage() {
                 <CardTitle>İçerik</CardTitle>
               </CardHeader>
               <CardContent>
-                <Textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="İçeriğinizi buraya yazın... (Markdown desteklenir)"
-                  rows={20}
-                  className="font-mono"
-                />
+                {/* İçerik alanı (SimpleMDE ile) */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-1">İçerik</label>
+                  <div className="border rounded-lg overflow-hidden shadow">
+                    <SimpleMDE
+                      value={content}
+                      onChange={setContent}
+                      options={{
+                        spellChecker: false,
+                        placeholder: "Markdown ile içerik yazın veya butonları kullanın...",
+                        minHeight: "400px",
+                        status: false,
+                      }}
+                      className="bg-white"
+                    />
+                  </div>
+                </div>
                 <p className="text-xs text-gray-500 mt-2">
                   Markdown formatını kullanabilirsiniz. Tahmini okuma süresi:{" "}
                   {Math.ceil(content.split(" ").length / 200)} dakika
@@ -459,11 +582,7 @@ export default function NewPostPage() {
                       <SelectValue placeholder="Kategori seçin" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id.toString()}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
+                      {categoryOptions}
                     </SelectContent>
                   </Select>
                 </div>
@@ -475,11 +594,7 @@ export default function NewPostPage() {
                       <SelectValue placeholder="Yazar seçin" />
                     </SelectTrigger>
                     <SelectContent>
-                      {authors.map((auth) => (
-                        <SelectItem key={auth.id} value={auth.id.toString()}>
-                          {auth.first_name} {auth.last_name}
-                        </SelectItem>
-                      ))}
+                      {authorOptions}
                     </SelectContent>
                   </Select>
                 </div>
@@ -502,13 +617,27 @@ export default function NewPostPage() {
               </CardHeader>
               <CardContent>
                 {featuredImage ? (
-                  <div className="space-y-3">
+                  <>
                     <img
                       src={featuredImage || "/placeholder.svg"}
                       alt="Öne çıkan görsel"
                       className="w-full h-32 object-cover rounded-lg"
                     />
-                    <div className="flex gap-2">
+                    {/* Canlı Kart Önizlemesi (interaktif) */}
+                    <div className="mt-4">
+                      <ImagePositionEditor
+                        imageUrl={featuredImage}
+                        title="Canlı Kart Önizlemesi"
+                        x={imgPos.x}
+                        y={imgPos.y}
+                        scale={imgScale}
+                        onChange={(pos) => {
+                          setImgPos({ x: pos.x, y: pos.y });
+                          setImgScale(pos.scale);
+                        }}
+                      />
+                    </div>
+                    <div className="flex gap-2 mt-3">
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -665,7 +794,7 @@ export default function NewPostPage() {
                         </DialogContent>
                       </Dialog>
                     </div>
-                  </div>
+                  </>
                 ) : (
                   <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
                     <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
@@ -844,31 +973,60 @@ export default function NewPostPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    placeholder="Etiket ekle..."
-                    onKeyPress={(e) => e.key === "Enter" && addTag()}
-                    className="flex-1"
-                  />
-                  <Button size="sm" onClick={addTag}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                {/* Tags alanı */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-1">Etiketler</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
                     {tags.map((tag) => (
-                      <Badge key={tag.id} variant="secondary" className="flex items-center gap-1">
+                      <Badge key={tag.name} variant="secondary" className="relative flex items-center gap-1 px-3 py-1 text-sm font-semibold shadow-md">
                         {tag.name}
-                        <button onClick={() => removeTag(tag.name)} className="ml-1 hover:text-red-500">
-                          <X className="h-3 w-3" />
+                        <button
+                          type="button"
+                          className="ml-1 text-green-600 hover:bg-green-100 hover:text-green-800 rounded-full w-5 h-5 flex items-center justify-center transition"
+                          onClick={() => removeTag(tag.name)}
+                          title="Kaldır"
+                        >
+                          <span className="text-lg leading-none">×</span>
                         </button>
                       </Badge>
                     ))}
                   </div>
-                )}
+                  <div className="flex gap-2 items-center">
+                    <select
+                      className="border rounded-lg px-3 py-2 text-sm bg-white shadow focus:ring-2 focus:ring-green-400 transition"
+                      value=""
+                      onChange={e => {
+                        const selected = allTags.find(t => t.id.toString() === e.target.value)
+                        if (selected) addTag(selected.name)
+                      }}
+                    >
+                      <option value="">Etiket seç...</option>
+                      {allTags.filter(t => !tags.some(tag => tag.name === t.name)).map(tag => (
+                        <option key={tag.id} value={tag.id}>{tag.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      className="border rounded-lg px-3 py-2 text-sm shadow focus:ring-2 focus:ring-green-400 transition"
+                      placeholder="Yeni etiket yaz..."
+                      value={newTag}
+                      onChange={e => setNewTag(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addTag()
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 text-sm font-semibold shadow transition"
+                      onClick={() => addTag()}
+                    >
+                      Ekle
+                    </button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </motion.div>

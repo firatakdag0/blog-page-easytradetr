@@ -15,6 +15,8 @@
         "vite": "^6.2.4"
     },
     "dependencies": {
-        "react-markdown": "^10.1.0"
+        "easymde": "^2.20.0",
+        "react-markdown": "^10.1.0",
+        "react-simplemde-editor": "^5.2.0"
     }
 }

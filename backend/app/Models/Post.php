@@ -33,6 +33,9 @@ class Post extends Model
         'is_featured',
         'is_trending',
         'allow_comments',
+        'featured_image_position_x',
+        'featured_image_position_y',
+        'featured_image_scale',
     ];
 
     protected $casts = [
@@ -44,6 +47,9 @@ class Post extends Model
         'views_count' => 'integer',
         'likes_count' => 'integer',
         'comments_count' => 'integer',
+        'featured_image_position_x' => 'float',
+        'featured_image_position_y' => 'float',
+        'featured_image_scale' => 'float',
     ];
 
     public function category(): BelongsTo

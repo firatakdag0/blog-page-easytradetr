@@ -63,6 +63,10 @@ class PostController extends Controller
 
         $posts = $query->paginate($perPage, ['*'], 'page', $page);
 
+        // Toplam içerik ve yayında içerik sayısı
+        $totalPosts = Post::count();
+        $publishedPosts = Post::where('status', 'published')->count();
+
         return response()->json([
             'success' => true,
             'data' => $posts->items(),
@@ -73,6 +77,8 @@ class PostController extends Controller
                 'total' => $posts->total(),
                 'from' => $posts->firstItem(),
                 'to' => $posts->lastItem(),
+                'all_total' => $totalPosts,
+                'published_total' => $publishedPosts,
             ]
         ]);
     }
@@ -145,6 +151,9 @@ class PostController extends Controller
             'allow_comments' => 'boolean',
             'tags' => 'array',
             'tags.*' => 'string',
+            'featured_image_position_x' => 'nullable|numeric',
+            'featured_image_position_y' => 'nullable|numeric',
+            'featured_image_scale' => 'nullable|numeric',
         ]);
 
         DB::beginTransaction();
@@ -166,6 +175,9 @@ class PostController extends Controller
                 'is_featured' => $request->is_featured ?? false,
                 'is_trending' => $request->is_trending ?? false,
                 'allow_comments' => $request->allow_comments ?? true,
+                'featured_image_position_x' => $request->featured_image_position_x,
+                'featured_image_position_y' => $request->featured_image_position_y,
+                'featured_image_scale' => $request->featured_image_scale,
             ]);
 
             // Etiketleri ekle
@@ -278,6 +290,9 @@ class PostController extends Controller
             'allow_comments' => 'boolean',
             'tags' => 'array',
             'tags.*' => 'string',
+            'featured_image_position_x' => 'nullable|numeric',
+            'featured_image_position_y' => 'nullable|numeric',
+            'featured_image_scale' => 'nullable|numeric',
         ]);
 
         DB::beginTransaction();
@@ -301,6 +316,9 @@ class PostController extends Controller
             if ($request->has('is_featured')) $updateData['is_featured'] = $request->is_featured;
             if ($request->has('is_trending')) $updateData['is_trending'] = $request->is_trending;
             if ($request->has('allow_comments')) $updateData['allow_comments'] = $request->allow_comments;
+            if ($request->has('featured_image_position_x')) $updateData['featured_image_position_x'] = $request->featured_image_position_x;
+            if ($request->has('featured_image_position_y')) $updateData['featured_image_position_y'] = $request->featured_image_position_y;
+            if ($request->has('featured_image_scale')) $updateData['featured_image_scale'] = $request->featured_image_scale;
 
             $post->update($updateData);
 
@@ -352,5 +370,57 @@ class PostController extends Controller
             'success' => true,
             'message' => 'Yazı başarıyla silindi.'
         ]);
+    }
+
+    /**
+     * Get previous and next posts by slug.
+     */
+    public function getPrevNextPosts(string $slug): \Illuminate\Http\JsonResponse
+    {
+        $post = Post::where('slug', $slug)
+            ->where('status', 'published')
+            ->first();
+
+        if (!$post) {
+            return response()->json([
+                'prev' => null,
+                'next' => null,
+            ]);
+        }
+
+        $prev = Post::with(['category', 'author', 'tags'])
+            ->where('status', 'published')
+            ->where('published_at', '<', $post->published_at)
+            ->orderBy('published_at', 'desc')
+            ->first();
+
+        $next = Post::with(['category', 'author', 'tags'])
+            ->where('status', 'published')
+            ->where('published_at', '>', $post->published_at)
+            ->orderBy('published_at', 'asc')
+            ->first();
+
+        return response()->json([
+            'prev' => $prev,
+            'next' => $next,
+        ]);
+    }
+
+    /**
+     * Check if a slug is unique (optionally excluding a post by id)
+     */
+    public function checkSlugUnique(Request $request): JsonResponse
+    {
+        $slug = $request->get('slug');
+        $excludeId = $request->get('exclude_id');
+        if (!$slug) {
+            return response()->json(['unique' => false, 'error' => 'Slug is required.'], 400);
+        }
+        $query = Post::where('slug', $slug);
+        if ($excludeId) {
+            $query->where('id', '!=', $excludeId);
+        }
+        $exists = $query->exists();
+        return response()->json(['unique' => !$exists]);
     }
 }

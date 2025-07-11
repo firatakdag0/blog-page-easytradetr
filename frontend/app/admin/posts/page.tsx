@@ -79,8 +79,9 @@ export default function PostsPage() {
   const [loading, setLoading] = useState(false)
   const [categoriesLoading, setCategoriesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
   // Yeni state'ler
+  const [allTotal, setAllTotal] = useState(0)
+  const [publishedTotal, setPublishedTotal] = useState(0)
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [currentPage, setCurrentPage] = useState(1)
@@ -105,40 +106,44 @@ export default function PostsPage() {
     fetchCategories()
   }, [])
 
-  useEffect(() => {
-    const fetchPosts = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const params: any = {}
-        if (searchQuery) params.search = searchQuery
-        if (selectedCategory !== "Tümü") params.category = selectedCategory
-        if (selectedStatus !== "Tümü") params.status = selectedStatus
-        if (sortBy) params.sort_by = sortBy
-        if (sortOrder) params.sort_order = sortOrder
-        params.page = currentPage
-        params.per_page = itemsPerPage
-        
-        const res = await apiClient.getAdminPosts(params)
-        setPosts(res)
-      } catch (err: any) {
-        console.error("Posts fetch error:", err)
-        setError("Yazılar yüklenemedi.")
-        setPosts([])
-        toast.error("Yazılar yüklenemedi", {
-          description: "Bir hata oluştu. Lütfen tekrar deneyin."
-        })
-      } finally {
-        setLoading(false)
-      }
+  // fetchPosts fonksiyonunu useEffect dışına çıkar:
+  const fetchPosts = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params: any = {}
+      if (searchQuery) params.search = searchQuery
+      if (selectedCategory !== "Tümü") params.category = selectedCategory
+      if (selectedStatus !== "Tümü") params.status = selectedStatus
+      if (sortBy) params.sort_by = sortBy
+      if (sortOrder) params.sort_order = sortOrder
+      params.page = currentPage
+      params.per_page = itemsPerPage
+      const res = await apiClient.getAdminPosts(params)
+      setPosts(res.data)
+      setAllTotal(res.pagination.all_total)
+      setPublishedTotal(res.pagination.published_total)
+    } catch (err: any) {
+      console.error("Posts fetch error:", err)
+      setError("Yazılar yüklenemedi.")
+      setPosts([])
+      toast.error("Yazılar yüklenemedi", {
+        description: "Bir hata oluştu. Lütfen tekrar deneyin."
+      })
+    } finally {
+      setLoading(false)
     }
+  }
+
+  // useEffect içinde fetchPosts'u çağır:
+  useEffect(() => {
     fetchPosts()
   }, [searchQuery, selectedCategory, selectedStatus, sortBy, sortOrder, currentPage, itemsPerPage, refreshKey])
 
   // İstatistikleri hesapla
   const stats = {
-    total: posts.length,
-    published: posts.filter(p => p.status === "published").length,
+    total: allTotal,
+    published: publishedTotal,
     draft: posts.filter(p => p.status === "draft").length,
     scheduled: posts.filter(p => p.status === "scheduled").length,
     featured: posts.filter(p => p.is_featured).length,
@@ -208,11 +213,8 @@ export default function PostsPage() {
   const handleDeletePost = async (postId: number) => {
     try {
       await apiClient.deletePost(postId)
-      const deletedPost = posts.find(post => post.id === postId)
-      setPosts(posts.filter(post => post.id !== postId))
-      toast.success("İçerik başarıyla silindi!", {
-        description: `${deletedPost?.title} silindi.`
-      })
+      toast.success("İçerik başarıyla silindi!")
+      fetchPosts()
     } catch (err: any) {
       setError("İçerik silinemedi.")
       toast.error("İçerik silinemedi", {
@@ -240,6 +242,7 @@ export default function PostsPage() {
       toast.success("İçerik başarıyla yayınlandı!", {
         description: `${post.title} yayınlandı.`
       })
+      fetchPosts()
     } catch (err: any) {
       console.error("Publish error:", err)
       toast.error("İçerik yayınlanamadı", {
@@ -267,6 +270,7 @@ export default function PostsPage() {
       toast.success("İçerik yayından kaldırıldı!", {
         description: `${post.title} taslak durumuna alındı.`
       })
+      fetchPosts()
     } catch (err: any) {
       console.error("Unpublish error:", err)
       toast.error("İçerik yayından kaldırılamadı", {
@@ -293,6 +297,65 @@ export default function PostsPage() {
       toast.error("URL kopyalanamadı")
     }
   }
+
+  // Yeni fonksiyonlar
+  const handleToggleFeatured = async (postId: number, current: boolean) => {
+    try {
+      // Eğer öne çıkarma işlemi yapılacaksa ve zaten 4 öne çıkan varsa, en eskiyi çıkar
+      if (!current) {
+        const featuredPosts = posts.filter(p => p.is_featured)
+        if (featuredPosts.length >= 4) {
+          // En eski öne çıkanı bul
+          const oldest = featuredPosts.reduce((a, b) => {
+            const dateA = a.published_at ? new Date(a.published_at).getTime() : 0
+            const dateB = b.published_at ? new Date(b.published_at).getTime() : 0
+            return dateA < dateB ? a : b
+          })
+          // Önce en eskiyi normal yap
+          await apiClient.updatePost(oldest.id, { is_featured: false })
+          toast.info("En eski öne çıkan içerik normal içeriğe alındı.", { description: oldest.title })
+        }
+      }
+      // Şimdi seçileni güncelle
+      const response = await apiClient.updatePost(postId, { is_featured: !current })
+      let updated: any
+      if (response && typeof response === 'object' && 'data' in response) {
+        updated = (response as any).data
+      } else {
+        updated = response
+      }
+      setRefreshKey((k) => k + 1) // Post listesini güncelle
+      toast.success(
+        updated.is_featured ? "İçerik öne çıkarıldı!" : "İçerik öne çıkanlıktan çıkarıldı!"
+      )
+    } catch (err: any) {
+      toast.error("İşlem başarısız oldu.", {
+        description: err?.message || "Lütfen tekrar deneyin."
+      })
+    }
+  }
+
+  const handleToggleTrending = async (postId: number, current: boolean) => {
+    try {
+      const response = await apiClient.updatePost(postId, { is_trending: !current })
+      let updated: any
+      if (response && typeof response === 'object' && 'data' in response) {
+        updated = (response as any).data
+      } else {
+        updated = response
+      }
+      setPosts(posts.map(p => p.id === postId ? { ...p, is_trending: updated.is_trending } : p))
+      toast.success(
+        updated.is_trending ? "İçerik trend yapıldı!" : "İçerik trendden çıkarıldı!"
+      )
+    } catch (err: any) {
+      toast.error("İşlem başarısız oldu.", {
+        description: err?.message || "Lütfen tekrar deneyin."
+      })
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(allTotal / itemsPerPage));
 
   return (
     <TooltipProvider>
@@ -600,7 +663,7 @@ export default function PostsPage() {
             <CardTitle className="flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                İçerikler ({posts.length})
+                İçerikler
               </span>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
@@ -888,11 +951,11 @@ export default function PostsPage() {
                                   URL Kopyala
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleToggleFeatured(post.id, post.is_featured)}>
                                   <Star className="h-4 w-4 mr-2" />
                                   {post.is_featured ? "Öne Çıkanlıktan Çıkar" : "Öne Çıkar"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleToggleTrending(post.id, post.is_trending)}>
                                   <TrendingUp className="h-4 w-4 mr-2" />
                                   {post.is_trending ? "Trendden Çıkar" : "Trend Yap"}
                                 </DropdownMenuItem>
@@ -957,22 +1020,64 @@ export default function PostsPage() {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Sayfa {currentPage}
-                  </span>
+                  {/* Sayfa numaraları */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(pageNum =>
+                      pageNum === 1 ||
+                      pageNum === totalPages ||
+                      Math.abs(pageNum - currentPage) <= 2
+                    )
+                    .map((pageNum, idx, arr) => {
+                      // Nokta ekle
+                      if (idx > 0 && pageNum - arr[idx - 1] > 1) {
+                        return [
+                          <span key={`dots-${pageNum}`}>...</span>,
+                          <Button
+                            key={pageNum}
+                            variant={pageNum === currentPage ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(pageNum)}
+                          >
+                            {pageNum}
+                          </Button>
+                        ]
+                      }
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    })}
+                  {/* Sayfa inputu */}
+                  <form onSubmit={e => { e.preventDefault(); const val = Number(e.currentTarget.pageInput.value); if(val >= 1 && val <= totalPages) setCurrentPage(val); }}>
+                    <input
+                      name="pageInput"
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      defaultValue={currentPage}
+                      className="w-16 px-2 py-1 border rounded text-center text-sm mx-2"
+                      style={{ width: 50 }}
+                    />
+                  </form>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={posts.length < itemsPerPage}
+                    disabled={currentPage === totalPages}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage(Math.ceil(posts.length / itemsPerPage))}
-                    disabled={posts.length < itemsPerPage}
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
                   >
                     <ChevronsRight className="h-4 w-4" />
                   </Button>
