@@ -28,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Tag } from "lucide-react"
-import { apiClient } from "@/lib/api"
+import { getTagsFromSupabase, createTagSupabase, updateTagSupabase, deleteTagSupabase } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast"
 import { RefreshButton } from "@/components/ui/refresh-button"
 
@@ -40,6 +40,16 @@ interface Tag {
   posts_count: number
   created_at: string
   updated_at: string
+}
+
+function slugify(text: string) {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-');
 }
 
 export default function TagsPage() {
@@ -61,9 +71,7 @@ export default function TagsPage() {
   const fetchTags = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.getTags()
-      // API'den gelen veri yapısını kontrol et
-      const tagsData = Array.isArray(response) ? response : (response?.data || [])
+      const tagsData = await getTagsFromSupabase();
       setTags(tagsData)
     } catch (error) {
       console.error("Error fetching tags:", error)
@@ -72,7 +80,7 @@ export default function TagsPage() {
         description: "Etiketler yüklenirken bir hata oluştu.",
         variant: "destructive",
       })
-      setTags([]) // Hata durumunda boş array
+      setTags([])
     } finally {
       setLoading(false)
     }
@@ -80,54 +88,45 @@ export default function TagsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
     try {
+      const formDataToSend = {
+        ...formData,
+        slug: slugify(formData.name),
+      };
       if (editingTag) {
-        await apiClient.updateTag(editingTag.id, formData)
+        await updateTagSupabase(editingTag.id, formDataToSend)
         toast({
           title: "✅ Başarılı!",
           description: `"${formData.name}" etiketi başarıyla güncellendi.`,
           duration: 3000,
         })
       } else {
-        await apiClient.createTag(formData)
+        await createTagSupabase(formDataToSend)
         toast({
           title: "🎉 Yeni Etiket Oluşturuldu!",
           description: `"${formData.name}" etiketi başarıyla oluşturuldu.`,
           duration: 4000,
         })
       }
-      
       setIsDialogOpen(false)
       setEditingTag(null)
       setFormData({ name: "", description: "" })
       fetchTags()
     } catch (error: any) {
       console.error("Error saving tag:", error)
-      // Laravel validation hatası
-      if (error && error.response && error.response.errors && error.response.errors.name) {
-        toast({
-          title: "❌ Hata!",
-          description: error.response.errors.name[0],
-          variant: "destructive",
-          duration: 5000,
-        })
-      } else {
-        toast({
-          title: "❌ Hata!",
-          description: "Etiket kaydedilirken bir hata oluştu. Lütfen tekrar deneyin.",
-          variant: "destructive",
-          duration: 5000,
-        })
-      }
+      toast({
+        title: "❌ Hata!",
+        description: error?.message || "Etiket kaydedilirken bir hata oluştu. Lütfen tekrar deneyin.",
+        variant: "destructive",
+        duration: 5000,
+      })
     }
   }
 
   const handleDelete = async (id: number) => {
     if (!confirm("Bu etiketi silmek istediğinizden emin misiniz?")) return
-    
     try {
-      await apiClient.deleteTag(id)
+      await deleteTagSupabase(id)
       toast({
         title: "Başarılı",
         description: "Etiket başarıyla silindi.",

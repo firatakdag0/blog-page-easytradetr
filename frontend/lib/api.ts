@@ -329,6 +329,8 @@ export interface Author {
   updated_at: string
 }
 
+import { supabase } from './supabaseClient';
+
 class ApiClient {
   private baseURL: string
 
@@ -413,6 +415,64 @@ class ApiClient {
     // apiCache.set(cacheKey, response.data, 300000) // 5 minutes cache
     
     return response.data
+  }
+
+  // Supabase'den blog postlarını çeken fonksiyon
+  async getPostsFromSupabase({
+    page = 1,
+    per_page = 12,
+    category = '',
+    search = '',
+    featured = false,
+    trending = false,
+  }: {
+    page?: number;
+    per_page?: number;
+    category?: string;
+    search?: string;
+    featured?: boolean;
+    trending?: boolean;
+  } = {}) {
+    let query = supabase
+      .from('posts')
+      .select(`
+        *,
+        category:categories(*),
+        author:authors(*),
+        tags:post_tag(*, tag:tags(*))
+      `, { count: 'exact' })
+      .order('published_at', { ascending: false })
+      .range((page - 1) * per_page, page * per_page - 1);
+
+    if (category) {
+      query = query.eq('category_id', category);
+    }
+    if (featured) {
+      query = query.eq('is_featured', true);
+    }
+    if (trending) {
+      query = query.eq('is_trending', true);
+    }
+    if (search) {
+      query = query.ilike('title', `%${search}%`);
+    }
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+
+    // tags alanını düzleştir
+    const posts = (data || []).map((post: any) => ({
+      ...post,
+      tags: (post.tags || []).map((pt: any) => pt.tag),
+    }));
+
+    return {
+      data: posts,
+      total: count,
+      last_page: Math.ceil((count || 0) / per_page),
+      current_page: page,
+      per_page,
+    };
   }
 
   async getAdminPosts(params?: {
@@ -770,3 +830,401 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient()
+
+export async function getCategoriesFromSupabase() {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getTagsFromSupabase() {
+  const { data, error } = await supabase
+    .from('tags')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getAuthorsFromSupabase() {
+  const { data, error } = await supabase
+    .from('authors')
+    .select('*, user:users(*)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  // user alanını düzleştir
+  return (data || []).map((author: any) => ({ ...author, ...author.user }));
+}
+
+export async function getPostBySlugFromSupabase(slug: string) {
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`*, category:categories(*), author:authors(*), tags:post_tag(*, tag:tags(*))`)
+    .eq('slug', slug)
+    .single();
+  if (error) throw error;
+  // tags alanını düzleştir
+  return {
+    ...data,
+    tags: (data?.tags || []).map((pt: any) => pt.tag),
+  };
+}
+
+export async function getAdminPostsFromSupabase({
+  page = 1,
+  per_page = 10,
+  category = '',
+  search = '',
+  status = '',
+  sort_by = 'created_at',
+  sort_order = 'desc',
+  is_featured = false,
+}: {
+  page?: number;
+  per_page?: number;
+  category?: string;
+  search?: string;
+  status?: string;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+  is_featured?: boolean;
+} = {}) {
+  let query = supabase
+    .from('posts')
+    .select(`*, category:categories(*), author:authors(*), tags:post_tag(*, tag:tags(*))`, { count: 'exact' })
+    .order(sort_by, { ascending: sort_order === 'asc' })
+    .range((page - 1) * per_page, page * per_page - 1);
+
+  if (category && category !== 'Tümü') {
+    query = query.eq('category_id', category);
+  }
+  if (status && status !== 'Tümü') {
+    query = query.eq('status', status);
+  }
+  if (is_featured) {
+    query = query.eq('is_featured', true);
+  }
+  if (search) {
+    query = query.ilike('title', `%${search}%`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  const posts = (data || []).map((post: any) => ({
+    ...post,
+    tags: (post.tags || []).map((pt: any) => pt.tag),
+  }));
+
+  // Ekstra istatistikler
+  const published_total = posts.filter((p: any) => p.status === 'published').length;
+  const all_total = count || posts.length;
+
+  return {
+    data: posts,
+    pagination: {
+      all_total,
+      published_total,
+      page,
+      per_page,
+      last_page: Math.ceil((count || 0) / per_page),
+    },
+  };
+}
+
+export async function getCommentsFromSupabase({
+  post_id = undefined,
+  search = '',
+  status = '',
+  page = 1,
+  per_page = 50,
+}: {
+  post_id?: number | string;
+  search?: string;
+  status?: string;
+  page?: number;
+  per_page?: number;
+} = {}) {
+  let query = supabase
+    .from('comments')
+    .select('*, user:users(*), post:posts(*)', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range((page - 1) * per_page, page * per_page - 1);
+
+  if (post_id) {
+    query = query.eq('post_id', post_id);
+  }
+  if (status && status !== 'Tümü') {
+    query = query.eq('status', status);
+  }
+  if (search) {
+    query = query.ilike('content', `%${search}%`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return {
+    data: data || [],
+    total: count,
+    page,
+    per_page,
+    last_page: Math.ceil((count || 0) / per_page),
+  };
+}
+
+export async function getMediaFromSupabase({
+  search = '',
+  type = '',
+  page = 1,
+  per_page = 50,
+}: {
+  search?: string;
+  type?: string;
+  page?: number;
+  per_page?: number;
+} = {}) {
+  let query = supabase
+    .from('media')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range((page - 1) * per_page, page * per_page - 1);
+
+  if (search) {
+    query = query.ilike('url', `%${search}%`);
+  }
+  if (type) {
+    query = query.eq('type', type);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return {
+    data: data || [],
+    total: count,
+    page,
+    per_page,
+    last_page: Math.ceil((count || 0) / per_page),
+  };
+}
+
+// Supabase Storage'a medya dosyası yükleme fonksiyonu
+type UploadMediaResult = { url: string; id?: number; mediaRow?: any };
+export async function uploadMediaToSupabase(file: File, customName?: string, uploadedBy?: string): Promise<UploadMediaResult> {
+  // 1. Supabase Storage'a yükle
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+  const { data, error } = await supabase.storage.from('media').upload(fileName, file);
+  if (error) throw error;
+  // 2. Public URL al
+  const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(fileName);
+  const url = publicUrlData?.publicUrl || '';
+  // 3. Media tablosuna kaydet
+  const fileType = file.type.startsWith("image/") ? "image"
+    : file.type.startsWith("video/") ? "video"
+    : file.type.startsWith("audio/") ? "audio"
+    : "other";
+  const { data: mediaRow, error: mediaError } = await supabase
+    .from('media')
+    .insert([{ 
+      url, 
+      type: fileType, // burada
+      name: customName || file.name, 
+      size: file.size, 
+      mime_type: file.type,
+      uploaded_by: uploadedBy
+    }])
+    .select()
+    .single();
+  if (mediaError) throw mediaError;
+  return { url, id: mediaRow?.id, mediaRow };
+}
+
+// Supabase'den medya dosyası silme fonksiyonu
+export async function deleteMediaFromSupabase(id: number, url: string) {
+  // 1. Media tablosundan sil
+  const { error } = await supabase.from('media').delete().eq('id', id);
+  if (error) throw error;
+  // 2. Storage'dan sil (opsiyonel, url'den dosya adını çıkar)
+  const fileName = url.split('/').pop();
+  if (fileName) {
+    await supabase.storage.from('media').remove([fileName]);
+  }
+}
+
+// Supabase Auth: Kullanıcı kaydı
+export async function signUpWithEmail(email: string, password: string) {
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+// Supabase Auth: Kullanıcı girişi
+export async function signInWithEmail(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+// Supabase Auth: Mevcut kullanıcıyı al
+export async function getCurrentUser() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return data.user;
+}
+
+export async function createCategorySupabase(formData: any) {
+  const { data, error } = await supabase.from('categories').insert([formData]).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateCategorySupabase(id: number, formData: any) {
+  const { data, error } = await supabase.from('categories').update(formData).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCategorySupabase(id: number) {
+  const { error } = await supabase.from('categories').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function createAuthorSupabase(formData: any) {
+  const dataToSend = { ...formData, user_id: 1 };
+  console.log("Supabase'a gönderilen veri:", dataToSend);
+  const { data, error } = await supabase.from('authors').insert([dataToSend]).select().single();
+  if (error) {
+    console.error("Supabase insert error:", error);
+    throw error;
+  }
+  return data;
+}
+
+export async function createTagSupabase(formData: any) {
+  const { data, error } = await supabase.from('tags').insert([formData]).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTagSupabase(id: number, formData: any) {
+  const { data, error } = await supabase.from('tags').update(formData).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTagSupabase(id: number) {
+  const { error } = await supabase.from('tags').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Supabase ile içerik ekleme
+export async function createPostWithSupabase(postData: CreatePostData) {
+  // 1. Postu ekle
+  const { tags, ...postFields } = postData;
+  const { data: post, error } = await supabase
+    .from('posts')
+    .insert([postFields])
+    .select()
+    .single();
+  if (error) throw error;
+  // 2. Tag ilişkilerini ekle
+  if (tags && tags.length > 0 && post) {
+    const tagRows = tags.map((tagName: string) => ({ post_id: post.id, tag_name: tagName }));
+    // post_tag tablosunda tag_name ile tag_id eşleştirip ekleme yapılabilir
+    await Promise.all(tagRows.map(async (row) => {
+      // tag var mı kontrol et
+      let { data: tag, error: tagError } = await supabase
+        .from('tags')
+        .select('id')
+        .eq('name', row.tag_name)
+        .single();
+      if (tagError || !tag) {
+        // tag yoksa oluştur
+        const { data: newTag, error: newTagError } = await supabase
+          .from('tags')
+          .insert([{ name: row.tag_name, slug: row.tag_name.toLowerCase().replace(/\s+/g, '-') }])
+          .select()
+          .single();
+        if (newTagError) throw newTagError;
+        tag = newTag;
+      }
+      // post_tag ilişkisini ekle
+      if (tag) {
+        await supabase.from('post_tag').insert([{ post_id: post.id, tag_id: tag.id }]);
+      }
+    }));
+  }
+  return post;
+}
+
+// Supabase ile içerik güncelleme
+export async function updatePostWithSupabase(postId: number, postData: Partial<CreatePostData>) {
+  const { tags, ...postFields } = postData;
+  // 1. Postu güncelle
+  const { data: post, error } = await supabase
+    .from('posts')
+    .update(postFields)
+    .eq('id', postId)
+    .select()
+    .single();
+  if (error) throw error;
+  // 2. Tag ilişkilerini güncelle
+  if (tags) {
+    // Önce eski ilişkileri sil
+    await supabase.from('post_tag').delete().eq('post_id', postId);
+    // Sonra yenilerini ekle
+    await Promise.all(tags.map(async (tagName: string) => {
+      let { data: tag, error: tagError } = await supabase
+        .from('tags')
+        .select('id')
+        .eq('name', tagName)
+        .single();
+      if (tagError || !tag) {
+        const { data: newTag, error: newTagError } = await supabase
+          .from('tags')
+          .insert([{ name: tagName, slug: tagName.toLowerCase().replace(/\s+/g, '-') }])
+          .select()
+          .single();
+        if (newTagError) throw newTagError;
+        tag = newTag;
+      }
+      if (tag) {
+        await supabase.from('post_tag').insert([{ post_id: postId, tag_id: tag.id }]);
+      }
+    }));
+  }
+  return post;
+}
+
+// Supabase ile içerik silme
+export async function deletePostWithSupabase(postId: number) {
+  // Önce post_tag ilişkilerini sil
+  await supabase.from('post_tag').delete().eq('post_id', postId);
+  // Sonra postu sil
+  const { error } = await supabase.from('posts').delete().eq('id', postId);
+  if (error) throw error;
+  return { message: 'İçerik silindi' };
+}
+
+export async function incrementPostViewCount(postId: number) {
+  // Önce mevcut views_count değerini çek
+  const { data: post, error: fetchError } = await supabase
+    .from('posts')
+    .select('views_count')
+    .eq('id', postId)
+    .single();
+  if (fetchError) throw fetchError;
+  const currentCount = post?.views_count ?? 0;
+  // 1 artırarak güncelle
+  const { data, error } = await supabase
+    .from('posts')
+    .update({ views_count: currentCount + 1 })
+    .eq('id', postId);
+  if (error) throw error;
+  return data;
+}

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { apiClient, BlogPost, Category, MediaFile, formatDateTimeForAPI, getImageUrl, Author } from "@/lib/api"
+import { BlogPost, Category, MediaFile, formatDateTimeForAPI, getImageUrl, Author, getCategoriesFromSupabase, getAuthorsFromSupabase, getPostBySlugFromSupabase } from "@/lib/api"
+import { updatePostWithSupabase, deletePostWithSupabase } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +26,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { ImagePositionEditor } from "@/components/ui/image-position-editor";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { supabase } from "@/lib/supabaseClient";
 
 export default function EditPostPage() {
   const router = useRouter()
@@ -76,36 +78,43 @@ export default function EditPostPage() {
       setLoading(true)
       setError(null)
       try {
-        const [post, cats, auths] = await Promise.all([
-          apiClient.getPost(postId),
-          apiClient.getCategories(),
-          apiClient.getAuthors(),
+        // Supabase'de id ile post çekmek için bir fonksiyon yoksa, slug ile çekilebilir veya yeni fonksiyon eklenebilir.
+        // Burada örnek olarak slug ile çekim yapılıyor, gerekirse id ile çekim fonksiyonu eklenmeli.
+        const [cats, auths] = await Promise.all([
+          getCategoriesFromSupabase(),
+          getAuthorsFromSupabase(),
         ])
+        // Postu id ile çekmek için Supabase fonksiyonu eklenmeli, örnek:
+        const { data: post, error: postError } = await supabase
+          .from('posts')
+          .select(`*, category:categories(*), author:authors(*), tags:post_tag(*, tag:tags(*))`)
+          .eq('id', postId)
+          .single();
+        if (postError) throw postError;
         setCategories(cats)
-        setAuthors((auths as any)?.data || [])
-        const postData: any = post && (typeof post === 'object' && 'data' in post ? post.data : post)
-        setTitle(postData.title)
-        setSlug(postData.slug)
-        setExcerpt(postData.excerpt)
-        setContent(postData.content)
-        setCategory(postData.category.id.toString())
-        setAuthor(postData.author.id.toString())
-        setTags(postData.tags.map((tag: any, i: number) => ({ id: i + 1, name: tag.name })))
-        setFeaturedImage(postData.featured_image || "")
-        setIsFeatured(postData.is_featured)
-        setIsTrending(postData.is_trending)
-        setStatus(postData.status || "draft")
-        setPublishDate(postData.published_at ? postData.published_at.slice(0, 16) : "")
-        setReadTime(postData.read_time)
-        setMetaTitle(postData.meta_title || "")
-        setMetaDescription(postData.meta_description || "")
+        setAuthors(auths)
+        setTitle(post.title)
+        setSlug(post.slug)
+        setExcerpt(post.excerpt)
+        setContent(post.content)
+        setCategory(post.category?.id?.toString() || "")
+        setAuthor(post.author?.id?.toString() || "")
+        setTags((post.tags || []).map((tag: any, i: number) => ({ id: i + 1, name: tag.name })))
+        setFeaturedImage(post.featured_image || "")
+        setIsFeatured(post.is_featured)
+        setIsTrending(post.is_trending)
+        setStatus(post.status || "draft")
+        setPublishDate(post.published_at ? post.published_at.slice(0, 16) : "")
+        setReadTime(post.read_time)
+        setMetaTitle(post.meta_title || "")
+        setMetaDescription(post.meta_description || "")
 
         // Post yüklendiğinde mevcut değerleri state'e aktar
         setImgPos({
-          x: typeof postData.featured_image_position_x === 'number' ? postData.featured_image_position_x : 0.5,
-          y: typeof postData.featured_image_position_y === 'number' ? postData.featured_image_position_y : 0.5,
+          x: typeof post.featured_image_position_x === 'number' ? post.featured_image_position_x : 0.5,
+          y: typeof post.featured_image_position_y === 'number' ? post.featured_image_position_y : 0.5,
         });
-        setImgScale(typeof postData.featured_image_scale === 'number' ? postData.featured_image_scale : 1);
+        setImgScale(typeof post.featured_image_scale === 'number' ? post.featured_image_scale : 1);
       } catch (err: any) {
         setError("İçerik yüklenemedi.")
       } finally {
@@ -119,12 +128,14 @@ export default function EditPostPage() {
   const fetchMediaFiles = async () => {
     setMediaLoading(true)
     try {
-      const response = await apiClient.getMedia({
-        search: mediaSearchQuery,
-        type: "image",
-        per_page: 50
-      })
-      setMediaFiles(response.data)
+      const response = await supabase
+        .from('media')
+        .select('*')
+        .eq('type', 'image')
+        .ilike('name', `%${mediaSearchQuery}%`)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      setMediaFiles(response.data as MediaFile[]);
     } catch (err: any) {
       console.error("Media fetch error:", err)
       toast.error("Medya dosyaları yüklenemedi")
@@ -230,7 +241,7 @@ export default function EditPostPage() {
         featured_image_position_y: imgPos.y,
         featured_image_scale: imgScale,
       }
-      await apiClient.updatePost(postId, postData)
+      await updatePostWithSupabase(postId, postData)
       router.push("/admin/posts")
     } catch (err: any) {
       console.error(err)
@@ -246,7 +257,7 @@ export default function EditPostPage() {
 
   const handleImagePositionConfirm = async () => {
     try {
-      await apiClient.updatePost(postId, {
+      await updatePostWithSupabase(postId, {
         featured_image_position_x: imgPos.x,
         featured_image_position_y: imgPos.y,
         featured_image_scale: imgScale,
@@ -260,7 +271,7 @@ export default function EditPostPage() {
   // Silme işlemi
   const handleDelete = async () => {
     try {
-      await apiClient.deletePost(postId)
+      await deletePostWithSupabase(postId)
       toast.success("İçerik başarıyla silindi!")
       router.push("/admin/posts")
     } catch (err: any) {
@@ -594,9 +605,9 @@ export default function EditPostPage() {
                   </Button>
                 </div>
 
-                {tags.length > 0 && (
+                {(tags || []).length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {tags.map((tag) => (
+                    {(tags || []).map((tag) => (
                       <Badge key={tag.id} variant="secondary" className="flex items-center gap-1">
                         {tag.name}
                         <button onClick={() => removeTag(tag.name)} className="ml-1 hover:text-red-500" type="button">
@@ -665,7 +676,7 @@ export default function EditPostPage() {
                       </div>
                     ))}
                   </div>
-                ) : mediaFiles.length === 0 ? (
+                ) : (mediaFiles || []).length === 0 ? (
                   <div className="text-center text-gray-500 py-8">
                     Resim bulunamadı.
                   </div>

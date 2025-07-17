@@ -47,7 +47,7 @@ import {
   Calendar,
   Palette,
 } from "lucide-react"
-import { apiClient, Category } from "@/lib/api"
+import { getCategoriesFromSupabase, Category, createCategorySupabase, updateCategorySupabase, deleteCategorySupabase } from "@/lib/api"
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([])
@@ -72,7 +72,7 @@ export default function CategoriesPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await apiClient.getCategories()
+      const res = await getCategoriesFromSupabase()
       setCategories(res)
     } catch (err: any) {
       console.error("Kategori yükleme hatası:", err)
@@ -84,7 +84,7 @@ export default function CategoriesPage() {
 
   const handleCreateCategory = async () => {
     try {
-      const newCategory = await apiClient.createCategory(formData)
+      const newCategory = await createCategorySupabase(formData)
       setCategories([...categories, newCategory])
       setIsCreateDialogOpen(false)
       resetForm()
@@ -102,7 +102,7 @@ export default function CategoriesPage() {
   const handleUpdateCategory = async () => {
     if (!editingCategory) return
     try {
-      const updatedCategory = await apiClient.updateCategory(editingCategory.id, formData)
+      const updatedCategory = await updateCategorySupabase(editingCategory.id, formData)
       setCategories(categories.map(cat => cat.id === editingCategory.id ? updatedCategory : cat))
       setIsEditDialogOpen(false)
       setEditingCategory(null)
@@ -120,7 +120,7 @@ export default function CategoriesPage() {
 
   const handleDeleteCategory = async (categoryId: number) => {
     try {
-      await apiClient.deleteCategory(categoryId)
+      await deleteCategorySupabase(categoryId)
       const deletedCategory = categories.find(cat => cat.id === categoryId)
       setCategories(categories.filter(cat => cat.id !== categoryId))
       toast.success("Kategori başarıyla silindi!", {

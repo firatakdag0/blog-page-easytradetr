@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { apiClient, BlogPost, getResponsiveImageUrl } from "@/lib/api"
+import { apiClient, BlogPost, getResponsiveImageUrl, getPostBySlugFromSupabase, incrementPostViewCount } from "@/lib/api"
 import { Calendar, Clock, Facebook, Twitter, Linkedin, Link2 } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import ReactMarkdown from "react-markdown"
@@ -42,11 +42,12 @@ export default function BlogPostPage() {
     const fetchPost = async () => {
       try {
         setLoading(true)
-        const fetchedPost = await apiClient.getBlogPostBySlug(slug)
+        // const fetchedPost = await apiClient.getBlogPostBySlug(slug)
+        const fetchedPost = await getPostBySlugFromSupabase(slug)
         setPost(fetchedPost)
-        const { prev, next } = await apiClient.getPrevNextPosts(slug)
-        setPrevPost(prev)
-        setNextPost(next)
+        // const { prev, next } = await apiClient.getPrevNextPosts(slug)
+        // setPrevPost(prev)
+        // setNextPost(next)
       } catch (err) {
         setError("Blog yazısı bulunamadı.")
       } finally {
@@ -57,6 +58,13 @@ export default function BlogPostPage() {
   }, [slug])
 
   const postData: any = (post && (typeof post === 'object' && 'data' in post ? post.data : post)) || null
+
+  // Post görüntülenince views_count artır
+  useEffect(() => {
+    if (postData?.id) {
+      incrementPostViewCount(postData.id);
+    }
+  }, [postData?.id]);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
   useEffect(() => {

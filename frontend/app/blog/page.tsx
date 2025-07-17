@@ -11,7 +11,7 @@ import { Footer } from "@/components/ui/footer"
 import { Pagination } from "@/components/ui/pagination"
 import { FilterTabs } from "@/components/ui/filter-tabs"
 import { ScrollReveal } from "@/components/ui/scroll-reveal"
-import { apiClient, getResponsiveImageUrl } from "@/lib/api"
+import { getAdminPostsFromSupabase, getResponsiveImageUrl } from "@/lib/api"
 import type { BlogPost, Category } from "@/lib/api"
 import {
   BookOpen,
@@ -311,36 +311,18 @@ export default function BlogPage() {
     setLoading(true)
     setError(null)
     try {
-      const cats = await apiClient.getCategories()
-      setCategories(cats)
-      let res: any
-      if (activeFilter === "featured") {
-        res = await apiClient.getPosts({
-          page: currentPage,
-          per_page: POSTS_PER_PAGE,
-          featured: true,
-          category: selectedCategory,
-          search: searchQuery,
-        })
-      } else if (activeFilter === "trending") {
-        res = await apiClient.getPosts({
-          page: currentPage,
-          per_page: POSTS_PER_PAGE,
-          trending: true,
-          category: selectedCategory,
-          search: searchQuery,
-        })
-      } else {
-        res = await apiClient.getPosts({
-          page: currentPage,
-          per_page: POSTS_PER_PAGE,
-          category: selectedCategory,
-          search: searchQuery,
-        })
-      }
-      setPosts(res.data)
-      setPagination(res)
-      // fetchData fonksiyonunda setFilterCounts satırını kaldır
+      // Kategoriler için eski apiClient kullanılabilir veya Supabase'e taşınabilir
+      // const cats = await apiClient.getCategories()
+      // setCategories(cats)
+      const res = await getAdminPostsFromSupabase({
+        page: currentPage,
+        per_page: POSTS_PER_PAGE,
+        category: selectedCategory,
+        search: searchQuery,
+        status: "published",
+      });
+      setPosts(res.data);
+      setPagination(res.pagination);
     } catch (err: any) {
       setError("Yazılar yüklenemedi.")
       setPosts([])
@@ -374,19 +356,17 @@ export default function BlogPage() {
             try {
               setLoading(true)
               setError(null)
-              // Fetch categories
-              const categoriesRes = await apiClient.getCategories()
-              setCategories(categoriesRes)
-              // Fetch posts with pagination
-              const postsRes = await apiClient.getPosts({
+              // Kategoriler için ayrı bir Supabase fonksiyonu kullanılmalı veya kaldırılmalı
+              // Sadece postları çek
+              const postsRes = await getAdminPostsFromSupabase({
                 page: currentPage,
                 per_page: POSTS_PER_PAGE,
-                category: selectedCategory || undefined,
+                category: selectedCategory,
                 search: searchQuery,
-              })
-              const postsArray = postsRes.data;
-              setPosts(postsArray)
-              setPagination(postsRes)
+                status: "published",
+              });
+              setPosts(postsRes.data);
+              setPagination(postsRes.pagination);
             } catch (err) {
               setError("Blog yazıları yüklenirken bir hata oluştu.")
               console.error(err)
@@ -403,16 +383,21 @@ export default function BlogPage() {
     }
   }, [currentPage, selectedCategory, searchQuery, activeFilter]);
 
-  // Fetch all featured posts for homepage
+  // Öne çıkan yazıları Supabase'den çek
   useEffect(() => {
-    if (currentPage === 1 && !selectedCategory && activeFilter === "all") {
-      apiClient.getPosts({ featured: true, per_page: 4 }).then((res) => {
-        setAllFeaturedPosts(res.data)
-      })
-    } else {
-      setAllFeaturedPosts([])
+    async function fetchFeatured() {
+      const res = await getAdminPostsFromSupabase({
+        page: 1,
+        per_page: 4,
+        is_featured: true,
+        status: "published",
+      });
+      setAllFeaturedPosts(res.data);
     }
-  }, [currentPage, selectedCategory, activeFilter])
+    if (currentPage === 1 && !selectedCategory && activeFilter === "all") {
+      fetchFeatured();
+    }
+  }, [currentPage, selectedCategory, activeFilter]);
 
   const getFilteredPosts = () => {
     let filtered = posts.filter((post) => {
@@ -458,7 +443,7 @@ export default function BlogPage() {
 const regularPosts = paginatedPosts.filter((post) => !post.is_featured)
 
   const filterCounts = {
-    all: pagination ? pagination.total : posts.length,
+    all: pagination && typeof pagination.all_total === 'number' ? pagination.all_total : posts.length,
     saved: savedPosts.size,
     trending: posts.filter((p) => p.is_trending).length,
     recent: posts.length,
@@ -662,7 +647,7 @@ const regularPosts = paginatedPosts.filter((post) => !post.is_featured)
                             </div>
                             <div className="absolute bottom-6 right-6 bg-black/80 text-white px-4 py-2 rounded-2xl text-sm flex items-center gap-2 font-medium">
                               <Eye className="h-4 w-4" />
-                              {post.views_count.toLocaleString()}
+                              {(post.views_count ?? 0).toLocaleString()}
                             </div>
                           </div>
 
@@ -859,7 +844,7 @@ const regularPosts = paginatedPosts.filter((post) => !post.is_featured)
                                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                   <span className="flex items-center gap-1">
                                     <Eye className="h-3 w-3" />
-                                    {post.views_count.toLocaleString()}
+                                    {(post.views_count ?? 0).toLocaleString()}
                                   </span>
                                   <span className="flex items-center gap-1">
                                     <MessageCircle className="h-3 w-3" />

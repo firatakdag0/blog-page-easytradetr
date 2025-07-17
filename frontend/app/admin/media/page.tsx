@@ -51,7 +51,8 @@ import {
   Filter,
   Loader2,
 } from "lucide-react"
-import { apiClient, MediaFile, getImageUrl } from "@/lib/api"
+import { apiClient, MediaFile, getImageUrl, getMediaFromSupabase, uploadMediaToSupabase, deleteMediaFromSupabase } from "@/lib/api"
+import { supabase } from "@/lib/supabaseClient"
 
 export default function MediaPage() {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([])
@@ -64,6 +65,8 @@ export default function MediaPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [customFileName, setCustomFileName] = useState("")
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
 
   useEffect(() => {
     fetchMediaFiles()
@@ -73,7 +76,11 @@ export default function MediaPage() {
     setLoading(true)
     setError(null)
     try {
-      const response = await apiClient.getMedia({
+      // const response = await apiClient.getMedia({
+      //   search: searchQuery,
+      //   per_page: 50
+      // })
+      const response = await getMediaFromSupabase({
         search: searchQuery,
         per_page: 50
       })
@@ -98,31 +105,31 @@ export default function MediaPage() {
     return () => clearTimeout(timeoutId)
   }, [searchQuery])
 
-  const handleFileUpload = async (files: FileList) => {
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedUploadFile(e.target.files[0])
+      setCustomFileName(e.target.files[0].name)
+    }
+  }
+
+  const handleFileUploadWithName = async () => {
+    if (!selectedUploadFile) return
     setUploading(true)
     setUploadProgress(0)
-    
     try {
-      const uploadPromises = Array.from(files).map(async (file, index) => {
-        // Simulated progress for each file
-        const progressIncrement = 100 / files.length
-        setUploadProgress((index * progressIncrement))
-        
-        const uploadedFile = await apiClient.uploadMedia(file)
-        
-        setUploadProgress(((index + 1) * progressIncrement))
-        return uploadedFile
-      })
-
-      const newFiles = await Promise.all(uploadPromises)
-      
-      // Yeni dosyaları listeye ekle
-      setMediaFiles([...newFiles, ...mediaFiles])
+      // Kullanıcı bilgisini al
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      // uploadMediaToSupabase fonksiyonunu customFileName ve userId ile çağır
+      const uploaded = await uploadMediaToSupabase(selectedUploadFile, customFileName, userId)
+      const newFiles = uploaded.mediaRow ? [uploaded.mediaRow, ...mediaFiles] : [...mediaFiles]
+      setMediaFiles(newFiles)
       setIsUploadDialogOpen(false)
       setUploadProgress(0)
-      
-      toast.success("Dosyalar başarıyla yüklendi!", {
-        description: `${files.length} dosya yüklendi.`
+      setSelectedUploadFile(null)
+      setCustomFileName("")
+      toast.success("Dosya başarıyla yüklendi!", {
+        description: `${customFileName}`
       })
     } catch (err: any) {
       console.error("Upload error:", err)
@@ -136,9 +143,9 @@ export default function MediaPage() {
     }
   }
 
-  const handleDeleteFile = async (fileId: number) => {
+  const handleDeleteFile = async (fileId: number, fileUrl: string) => {
     try {
-      await apiClient.deleteMedia(fileId)
+      await deleteMediaFromSupabase(fileId, fileUrl)
       setMediaFiles(mediaFiles.filter(file => file.id !== fileId))
       toast.success("Dosya başarıyla silindi!")
     } catch (err: any) {
@@ -152,7 +159,14 @@ export default function MediaPage() {
 
   const handleBulkDelete = async () => {
     try {
-      await apiClient.bulkDeleteMedia(selectedFiles)
+      // await apiClient.bulkDeleteMedia(selectedFiles)
+      // Supabase ile toplu silme
+      for (const fileId of selectedFiles) {
+        const file = mediaFiles.find(f => f.id === fileId)
+        if (file) {
+          await deleteMediaFromSupabase(fileId, file.url)
+        }
+      }
       setMediaFiles(mediaFiles.filter(file => !selectedFiles.includes(file.id)))
       setSelectedFiles([])
       toast.success("Dosyalar başarıyla silindi!", {
@@ -180,7 +194,7 @@ export default function MediaPage() {
   }
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
+    if (!bytes || isNaN(bytes)) return "0 Bytes"
     const k = 1024
     const sizes = ["Bytes", "KB", "MB", "GB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
@@ -188,9 +202,9 @@ export default function MediaPage() {
   }
 
   const getFileTypeIcon = (mimeType: string) => {
-    if (mimeType.startsWith("image/")) return "🖼️"
-    if (mimeType.startsWith("video/")) return "🎥"
-    if (mimeType.startsWith("audio/")) return "🎵"
+    if ((mimeType || '').startsWith("image/")) return "🖼️"
+    if ((mimeType || '').startsWith("video/")) return "🎥"
+    if ((mimeType || '').startsWith("audio/")) return "🎵"
     return "📄"
   }
 
@@ -204,9 +218,9 @@ export default function MediaPage() {
   }
 
   const filteredFiles = mediaFiles.filter(file =>
-    file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    file.alt_text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    file.caption?.toLowerCase().includes(searchQuery.toLowerCase())
+    (file.name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (file.alt_text?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (file.caption?.toLowerCase() || '').includes(searchQuery.toLowerCase())
   )
 
   return (
@@ -240,9 +254,8 @@ export default function MediaPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  multiple
                   accept="image/*,video/*,audio/*"
-                  onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+                  onChange={handleFileInputChange}
                   className="hidden"
                 />
                 <Button 
@@ -259,6 +272,16 @@ export default function MediaPage() {
                     "Dosya Seç"
                   )}
                 </Button>
+                {selectedUploadFile && (
+                  <div className="mt-4 space-y-2">
+                    <Input
+                      value={customFileName}
+                      onChange={e => setCustomFileName(e.target.value)}
+                      placeholder="Dosya adı"
+                      className="w-full"
+                    />
+                  </div>
+                )}
               </div>
               {uploading && (
                 <div className="space-y-2">
@@ -278,6 +301,9 @@ export default function MediaPage() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsUploadDialogOpen(false)}>
                 İptal
+              </Button>
+              <Button onClick={handleFileUploadWithName} disabled={!selectedUploadFile || uploading}>
+                Yükle
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -399,10 +425,10 @@ export default function MediaPage() {
                       className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
                     />
                     <div className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden mb-3">
-                      {file.mime_type.startsWith("image/") ? (
+                      {(file.mime_type || '').startsWith("image/") ? (
                         <img
-                          src={getImageUrl(file, 'original')}
-                          alt={file.alt_text || file.name}
+                          src={getImageUrl(file, 'original') || '/placeholder.jpg'}
+                          alt={file.alt_text || file.name || "Görsel"}
                           className="w-full h-full object-contain"
                         />
                       ) : (
@@ -413,10 +439,10 @@ export default function MediaPage() {
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                        {file.name}
+                        {file.name || "İsimsiz"}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatFileSize(file.size)}
+                        {formatFileSize(Number(file.size) || 0)}
                       </p>
                       {file.width && file.height && (
                         <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -435,13 +461,9 @@ export default function MediaPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => window.open(file.url, "_blank")}> 
                           <Eye className="h-4 w-4 mr-2" />
                           Görüntüle
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Download className="h-4 w-4 mr-2" />
-                          İndir
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => copyToClipboard(file.url)}>
                           <Copy className="h-4 w-4 mr-2" />
@@ -466,7 +488,7 @@ export default function MediaPage() {
                               <AlertDialogCancel>İptal</AlertDialogCancel>
                               <AlertDialogAction 
                                 className="bg-red-600 hover:bg-red-700"
-                                onClick={() => handleDeleteFile(file.id)}
+                                onClick={() => handleDeleteFile(file.id, file.url)}
                               >
                                 Sil
                               </AlertDialogAction>
@@ -530,10 +552,10 @@ export default function MediaPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
-                            {file.mime_type.startsWith("image/") ? (
+                            {(file.mime_type || '').startsWith("image/") ? (
                               <img
-                                src={getImageUrl(file, 'original')}
-                                alt={file.alt_text || file.name}
+                                src={getImageUrl(file, 'original') || '/placeholder.jpg'}
+                                alt={file.alt_text || file.name || "Görsel"}
                                 className="w-full h-full object-contain"
                               />
                             ) : (
@@ -544,7 +566,7 @@ export default function MediaPage() {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {file.name}
+                              {file.name || "İsimsiz"}
                             </p>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
                               {file.mime_type}
@@ -553,7 +575,7 @@ export default function MediaPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                        {formatFileSize(file.size)}
+                        {formatFileSize(Number(file.size) || 0)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                         {file.width && file.height ? `${file.width} × ${file.height}` : "-"}
@@ -569,13 +591,9 @@ export default function MediaPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => window.open(file.url, "_blank")}> 
                               <Eye className="h-4 w-4 mr-2" />
                               Görüntüle
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Download className="h-4 w-4 mr-2" />
-                              İndir
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => copyToClipboard(file.url)}>
                               <Copy className="h-4 w-4 mr-2" />
@@ -600,7 +618,7 @@ export default function MediaPage() {
                                   <AlertDialogCancel>İptal</AlertDialogCancel>
                                   <AlertDialogAction 
                                     className="bg-red-600 hover:bg-red-700"
-                                    onClick={() => handleDeleteFile(file.id)}
+                                    onClick={() => handleDeleteFile(file.id, file.url)}
                                   >
                                     Sil
                                   </AlertDialogAction>

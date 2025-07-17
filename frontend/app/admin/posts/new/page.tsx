@@ -47,6 +47,7 @@ import dynamic from "next/dynamic"
 const SimpleMDE = dynamic(() => import("react-simplemde-editor"), { ssr: false }) as any
 import "easymde/dist/easymde.min.css"
 import { ImagePositionEditor } from "@/components/ui/image-position-editor";
+import { getCategoriesFromSupabase, getAuthorsFromSupabase, createPostWithSupabase } from '@/lib/api';
 
 export default function NewPostPage() {
   const [title, setTitle] = useState("")
@@ -173,7 +174,7 @@ export default function NewPostPage() {
         featured_image_position_y: imgPos.y,
         featured_image_scale: imgScale,
       }
-      await apiClient.createPost(postData)
+      await createPostWithSupabase(postData)
       
       const statusText = saveStatus === "published" ? "yayınlandı" : "taslak olarak kaydedildi"
       toast.success("İçerik başarıyla oluşturuldu!", {
@@ -193,13 +194,10 @@ export default function NewPostPage() {
 
   useEffect(() => {
     // Kategorileri çek
-    apiClient.getCategories().then(setCategories)
+    getCategoriesFromSupabase().then(setCategories)
     // Yazarları çek
-    apiClient.getAuthors().then((response) => {
-      const authorsArray = (response as any)?.data || []
-      setAuthors(authorsArray)
-    })
-    apiClient.getTags().then((data) => setAllTags(data))
+    getAuthorsFromSupabase().then((authors) => setAuthors(authors))
+    // apiClient.getTags() burada kalabilir veya Supabase fonksiyonu ile değiştirilebilir
   }, [])
 
   const [slugAvailable, setSlugAvailable] = useState(true);

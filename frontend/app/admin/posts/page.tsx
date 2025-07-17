@@ -28,10 +28,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
+  Tooltip,
   TooltipTrigger,
+  TooltipContent,
 } from "@/components/ui/tooltip"
 import {
   FileText,
@@ -68,6 +68,7 @@ import {
 import Link from "next/link"
 import { apiClient, BlogPost, Category } from "@/lib/api"
 import { Label } from "@/components/ui/label"
+import { getAdminPostsFromSupabase, getCategoriesFromSupabase, deletePostWithSupabase, updatePostWithSupabase } from '@/lib/api';
 
 export default function PostsPage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -94,7 +95,7 @@ export default function PostsPage() {
     const fetchCategories = async () => {
       setCategoriesLoading(true)
       try {
-        const cats = await apiClient.getCategories()
+        const cats = await getCategoriesFromSupabase()
         setCategories(cats)
       } catch (err) {
         console.error("Categories fetch error:", err)
@@ -119,7 +120,7 @@ export default function PostsPage() {
       if (sortOrder) params.sort_order = sortOrder
       params.page = currentPage
       params.per_page = itemsPerPage
-      const res = await apiClient.getAdminPosts(params)
+      const res = await getAdminPostsFromSupabase(params)
       setPosts(res.data)
       setAllTotal(res.pagination.all_total)
       setPublishedTotal(res.pagination.published_total)
@@ -193,7 +194,7 @@ export default function PostsPage() {
   const handleBulkAction = async (action: string) => {
     if (action === "delete" && selectedPosts.length > 0) {
       try {
-        await Promise.all(selectedPosts.map(id => apiClient.deletePost(id)))
+        await Promise.all(selectedPosts.map(id => deletePostWithSupabase(id)))
         setPosts(posts.filter(post => !selectedPosts.includes(post.id)))
         setSelectedPosts([])
         toast.success("Toplu silme işlemi başarılı!", {
@@ -212,7 +213,7 @@ export default function PostsPage() {
 
   const handleDeletePost = async (postId: number) => {
     try {
-      await apiClient.deletePost(postId)
+      await deletePostWithSupabase(postId)
       toast.success("İçerik başarıyla silindi!")
       fetchPosts()
     } catch (err: any) {
@@ -228,7 +229,7 @@ export default function PostsPage() {
       const post = posts.find(p => p.id === postId)
       if (!post) return
       
-      await apiClient.updatePost(postId, {
+      await updatePostWithSupabase(postId, {
         status: "published",
         published_at: new Date().toISOString()
       })
@@ -256,7 +257,7 @@ export default function PostsPage() {
       const post = posts.find(p => p.id === postId)
       if (!post) return
       
-      await apiClient.updatePost(postId, {
+      await updatePostWithSupabase(postId, {
         status: "draft",
         published_at: null
       })
@@ -312,12 +313,12 @@ export default function PostsPage() {
             return dateA < dateB ? a : b
           })
           // Önce en eskiyi normal yap
-          await apiClient.updatePost(oldest.id, { is_featured: false })
+          await updatePostWithSupabase(oldest.id, { is_featured: false })
           toast.info("En eski öne çıkan içerik normal içeriğe alındı.", { description: oldest.title })
         }
       }
       // Şimdi seçileni güncelle
-      const response = await apiClient.updatePost(postId, { is_featured: !current })
+      const response = await updatePostWithSupabase(postId, { is_featured: !current })
       let updated: any
       if (response && typeof response === 'object' && 'data' in response) {
         updated = (response as any).data
@@ -337,7 +338,7 @@ export default function PostsPage() {
 
   const handleToggleTrending = async (postId: number, current: boolean) => {
     try {
-      const response = await apiClient.updatePost(postId, { is_trending: !current })
+      const response = await updatePostWithSupabase(postId, { is_trending: !current })
       let updated: any
       if (response && typeof response === 'object' && 'data' in response) {
         updated = (response as any).data
@@ -695,24 +696,12 @@ export default function PostsPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Seç
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      İçerik
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Durum
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      İstatistikler
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Tarih
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      İşlemler
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Seç</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">İçerik</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Durum</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">İstatistikler</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tarih</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">İşlemler</th>
                   </tr>
                 </thead>
               </table>
@@ -730,9 +719,7 @@ export default function PostsPage() {
                     </tr>
                   ) : error ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 text-center text-red-500 dark:text-red-400">
-                        {error}
-                      </td>
+                        <td colSpan={6} className="px-6 py-4 text-center text-red-500 dark:text-red-400">{error}</td>
                     </tr>
                   ) : posts.length === 0 ? (
                     <tr>
@@ -746,13 +733,7 @@ export default function PostsPage() {
                     </tr>
                   ) : (
                     posts.map((post, index) => (
-                      <motion.tr
-                        key={post.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, delay: index * 0.05 }}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                      >
+                        <tr key={post.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <input
                             type="checkbox"
@@ -804,7 +785,7 @@ export default function PostsPage() {
                                   <Avatar className="h-4 w-4">
                                     <AvatarImage src={post.author.avatar || "/placeholder.svg"} />
                                     <AvatarFallback className="text-xs">
-                                      {post.author.name
+                                      {(post.author?.name || '')
                                         .split(" ")
                                         .map((n) => n[0])
                                         .join("")}
@@ -834,7 +815,7 @@ export default function PostsPage() {
                               <TooltipTrigger>
                                 <span className="flex items-center gap-1">
                                   <Eye className="h-4 w-4" />
-                                  {post.views_count.toLocaleString()}
+                                  {(typeof post.views_count === 'number' ? post.views_count : 0).toLocaleString()}
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>
@@ -935,157 +916,90 @@ export default function PostsPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem asChild>
-                                  <Link href={`/admin/posts/${post.id}/edit`}>
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    Düzenle
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/blog/${post.slug}`} target="_blank">
-                                    <ExternalLink className="h-4 w-4 mr-2" />
-                                    Görüntüle
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => copyToClipboard(`${window.location.origin}/blog/${post.slug}`)}>
-                                  <Copy className="h-4 w-4 mr-2" />
-                                  URL Kopyala
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleToggleFeatured(post.id, post.is_featured)}>
-                                  <Star className="h-4 w-4 mr-2" />
-                                  {post.is_featured ? "Öne Çıkanlıktan Çıkar" : "Öne Çıkar"}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleToggleTrending(post.id, post.is_trending)}>
-                                  <TrendingUp className="h-4 w-4 mr-2" />
-                                  {post.is_trending ? "Trendden Çıkar" : "Trend Yap"}
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      Sil
-                                    </DropdownMenuItem>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>İçeriği silmek istediğinizden emin misiniz?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Bu işlem geri alınamaz. İçerik kalıcı olarak silinecektir.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>İptal</AlertDialogCancel>
-                                      <AlertDialogAction 
-                                        className="bg-red-600 hover:bg-red-700"
-                                        onClick={() => handleDeletePost(post.id)}
-                                      >
+                                    <Link href={`/admin/posts/${post.id}/edit`}>
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Düzenle
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => copyToClipboard(`${window.location.origin}/blog/${post.slug}`)}>
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    URL Kopyala
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem asChild>
+                                    <a href={`/blog/${post.slug}`} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="h-4 w-4 mr-2" />
+                                      Canlıda Gör
+                                    </a>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => handleToggleFeatured(post.id, post.is_featured)}>
+                                    <Star className="h-4 w-4 mr-2 text-yellow-500" />
+                                    {post.is_featured ? "Öne Çıkanlıktan Çıkar" : "Öne Çıkar"}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleToggleTrending(post.id, post.is_trending)}>
+                                    <TrendingUp className="h-4 w-4 mr-2 text-green-500" />
+                                    {post.is_trending ? "Trendden Çıkar" : "Trend Yap"}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <DropdownMenuItem className="text-red-600 focus:text-red-700">
+                                        <Trash2 className="h-4 w-4 mr-2" />
                                         Sil
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-            {/* Sayfalama */}
-            {posts.length > 0 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="text-sm text-gray-700 dark:text-gray-300">
-                  {posts.length} içerik gösteriliyor
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronsLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  {/* Sayfa numaraları */}
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(pageNum =>
-                      pageNum === 1 ||
-                      pageNum === totalPages ||
-                      Math.abs(pageNum - currentPage) <= 2
-                    )
-                    .map((pageNum, idx, arr) => {
-                      // Nokta ekle
-                      if (idx > 0 && pageNum - arr[idx - 1] > 1) {
-                        return [
-                          <span key={`dots-${pageNum}`}>...</span>,
-                          <Button
-                            key={pageNum}
-                            variant={pageNum === currentPage ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setCurrentPage(pageNum)}
-                          >
-                            {pageNum}
-                          </Button>
-                        ]
-                      }
-                      return (
-                        <Button
-                          key={pageNum}
-                          variant={pageNum === currentPage ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setCurrentPage(pageNum)}
-                        >
-                          {pageNum}
-                        </Button>
-                      )
-                    })}
-                  {/* Sayfa inputu */}
-                  <form onSubmit={e => { e.preventDefault(); const val = Number(e.currentTarget.pageInput.value); if(val >= 1 && val <= totalPages) setCurrentPage(val); }}>
-                    <input
-                      name="pageInput"
-                      type="number"
-                      min={1}
-                      max={totalPages}
-                      defaultValue={currentPage}
-                      className="w-16 px-2 py-1 border rounded text-center text-sm mx-2"
-                      style={{ width: 50 }}
-                    />
-                  </form>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronsRight className="h-4 w-4" />
-                  </Button>
-                </div>
+                                      </DropdownMenuItem>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>İçeriği silmek istediğinizden emin misiniz?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Bu işlem geri alınamaz. İçerik kalıcı olarak silinecektir.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>İptal</AlertDialogCancel>
+                                        <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => handleDeletePost(post.id)}>
+                                          Sil
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
+
+        {/* Sayfalama */}
+        <div className="flex items-center justify-between mt-6">
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Toplam {allTotal} içerik, {totalPages} sayfa
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium">
+              {currentPage} / {totalPages}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </TooltipProvider>
   )

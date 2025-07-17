@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Shield, Lock, Eye, EyeOff, CheckCircle } from "lucide-react"
 import { motion } from "framer-motion"
-import { apiClient } from "@/lib/api"
+import { apiClient, signInWithEmail } from "@/lib/api"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 export default function AdminLogin() {
@@ -49,7 +49,8 @@ export default function AdminLogin() {
     setLoading(true)
     setError("")
     try {
-      await apiClient.login(email, password)
+      // await apiClient.login(email, password)
+      await signInWithEmail(email, password)
       router.push("/admin")
     } catch (error: any) {
       const newAttempts = loginAttempts + 1

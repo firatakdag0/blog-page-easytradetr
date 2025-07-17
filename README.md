@@ -1,202 +1,163 @@
-# Easytrade Blog
+# EasyTradeTR Blog Platformu
 
-## Proje Amacı
+## Proje Hakkında
 
-Easytrade Blog, modern ve kullanıcı dostu bir blog platformudur. Hem içerik üreticileri (yazarlar, adminler) hem de ziyaretçiler için kolay kullanım ve zengin özellikler sunar. Blog yazıları, kategoriler, etiketler, yazar profilleri, öne çıkan yazılar, kaydedilenler ve gelişmiş filtreleme gibi fonksiyonlar içerir.
+EasyTradeTR Blog Platformu, modern bir blog ve içerik yönetim sistemidir. Next.js (React), Supabase ve TailwindCSS ile geliştirilmiştir. Hem ziyaretçiler hem de adminler için kullanıcı dostu, hızlı ve güvenli bir deneyim sunar. Proje, medya yönetimi, kategori/tag sistemi, kullanıcı yönetimi, gelişmiş admin paneli ve SEO uyumlu blog sayfaları içerir.
 
-## Kullanılan Teknolojiler
-
-- **Frontend:**
-  - Next.js (React tabanlı)
-  - TypeScript
-  - TailwindCSS
-  - Framer Motion (animasyonlar için)
-  - Lucide React (ikonlar)
-  - Swiper.js (slider/carousel)
-  - React Markdown (zengin içerik)
-
-- **Backend:**
-  - Laravel (PHP framework)
-  - Eloquent ORM
-  - RESTful API
-  - Seeder ve Migration desteği
-
-- **Veritabanı:**
-  - MySQL veya MariaDB (Laravel ile uyumlu herhangi biri)
-
-- **Diğer:**
-  - localStorage (kaydedilenler için)
-  - JSON yedekleme ve geri yükleme desteği
-
-## Kurulum
-
-### 1. Backend (Laravel)
-
-```bash
-cd backend
-composer install
-cp .env.example .env
-# .env dosyasını veritabanı bilgilerinize göre düzenleyin
-php artisan key:generate
-php artisan migrate --seed
-php artisan serve
-```
-
-### 2. Frontend (Next.js)
-
-```bash
-cd frontend
-npm install # veya pnpm install
-cp .env.example .env.local
-# .env.local dosyasını API adresinize göre düzenleyin
-npm run dev
-```
+---
 
 ## Özellikler
 
-- Blog yazıları oluşturma, düzenleme, silme (admin paneli)
-- Kategori, etiket ve yazar yönetimi
-- Öne çıkan yazılar ve trend yazılar
-- Kaydedilenler (localStorage ile kalıcı)
-- Gelişmiş filtreleme ve arama
-- Responsive ve modern arayüz
-- Animasyonlu geçişler ve kullanıcı dostu deneyim
-- JSON ile veri yedekleme ve geri yükleme desteği (Laravel artisan komutu ile)
-
-## Yedekleme & Geri Yükleme
-
-- Tüm içerikleri JSON olarak dışa aktırabilir, gerektiğinde tekrar yükleyebilirsiniz.
-- Yedek almak için özel artisan komutu kullanılabilir (detaylar için dökümana bakın).
-
-## Katkı ve Lisans
-
-- Açık kaynaklıdır, katkılara açıktır.
-- Lisans: MIT
+- **Modern Blog Sayfası:** SEO uyumlu, hızlı, mobil uyumlu blog listesi ve detay sayfaları
+- **Admin Paneli:** İçerik, kategori, yazar, medya, kullanıcı, yorum ve ayar yönetimi
+- **Medya Yönetimi:** Supabase Storage ile görsel/video yükleme, silme, arama, filtreleme
+- **Kategori & Etiket Sistemi:** Çoklu kategori ve tag desteği
+- **Yazar Yönetimi:** Yazar profilleri, avatar, biyografi
+- **Kullanıcı Yönetimi:** Supabase Auth ile güvenli oturum açma/kapama
+- **Yorumlar:** Yorum ekleme, silme, onaylama (isteğe bağlı)
+- **Analytics:** Görüntülenme, okuma süresi, trend/öne çıkan yazılar
+- **Tema Desteği:** Açık/koyu mod
+- **Responsive Tasarım:** Tüm cihazlarda kusursuz görünüm
 
 ---
 
-## 📦 Hazır Veri Yedeği (`blog_backup.json`)
+## Teknoloji Yığını
 
-Bu projede, örnek ve gerçek blog içeriklerini hızlıca yükleyebilmek için kök dizinde **`blog_backup.json`** adında bir yedek dosyası bulunmaktadır.  
-Bu dosya; yazılar, kategoriler, etiketler ve yazarlar gibi tüm temel verileri içerir.
-
-### Yedek Veriyi Laravel'e Yükleme
-
-1. **Seeder Oluştur:**  
-   `backend/database/seeders/BlogJsonImportSeeder.php` dosyasını oluştur ve aşağıdaki gibi yapılandır:
-
-   ```php
-   <?php
-
-   namespace Database\Seeders;
-
-   use Illuminate\Database\Seeder;
-   use Illuminate\Support\Facades\DB;
-   use Illuminate\Support\Facades\File;
-
-   class BlogJsonImportSeeder extends Seeder
-   {
-       public function run()
-       {
-           $json = File::get(base_path('blog_backup.json'));
-           $data = json_decode($json, true);
-
-           // Kategoriler
-           foreach ($data['categories'] as $category) {
-               DB::table('categories')->updateOrInsert(['id' => $category['id']], $category);
-           }
-
-           // Etiketler
-           foreach ($data['tags'] as $tag) {
-               DB::table('tags')->updateOrInsert(['id' => $tag['id']], $tag);
-           }
-
-           // Yazarlar
-           foreach ($data['authors'] as $author) {
-               DB::table('authors')->updateOrInsert(['id' => $author['id']], $author);
-           }
-
-           // Yazılar
-           foreach ($data['posts'] as $post) {
-               $tags = $post['tags'] ?? [];
-               $author = $post['author'] ?? null;
-               unset($post['tags'], $post['author'], $post['category']);
-               DB::table('posts')->updateOrInsert(['id' => $post['id']], $post);
-
-               // Post-tag pivot
-               foreach ($tags as $tag) {
-                   DB::table('post_tag')->updateOrInsert([
-                       'post_id' => $post['id'],
-                       'tag_id' => $tag['id'],
-                   ]);
-               }
-           }
-       }
-   }
-   ```
-
-2. **Seeder'ı `DatabaseSeeder.php`'ye ekle:**
-
-   ```php
-   $this->call(BlogJsonImportSeeder::class);
-   ```
-
-3. **Seed Komutunu Çalıştır:**
-
-   ```bash
-   php artisan db:seed --class=BlogJsonImportSeeder
-   ```
-
-   > **Not:** Eğer tablo yapılarında değişiklik yaptıysan önce `php artisan migrate:fresh` ile veritabanını sıfırlayabilirsin.
+- **Frontend:** Next.js (App Router), React, TypeScript
+- **Backend:** Supabase (PostgreSQL, Auth, Storage)
+- **UI:** TailwindCSS, Shadcn UI, Framer Motion
+- **State Management:** React Hooks
+- **Bildirimler:** Sonner
+- **Diğer:** Lucide React Icons, Swiper.js, Markdown desteği
 
 ---
 
-## ⏰ Laravel Schedule (Zamanlanmış Görevler)
+## Kurulum
 
-Projede, bazı işlemlerin otomatik olarak belirli aralıklarla çalışması için Laravel’in **Schedule** (Zamanlayıcı) sistemi kullanılmaktadır.
-
-### Örnek: Otomatik Yayınlama ve Optimize Etme
-
-- **Yayınlanacak yazıların otomatik olarak yayına alınması**
-- **Veritabanı optimizasyonu**
-
-#### 1. Komutlar Nerede?
-
-`backend/app/Console/Commands/` klasöründe:
-- `PublishScheduledPosts.php` (Zamanı gelen yazıları yayına alır)
-- `OptimizeDatabase.php` (Veritabanı bakımı yapar)
-
-#### 2. Schedule Tanımı
-
-`backend/app/Console/Kernel.php` dosyasında:
-
-```php
-protected function schedule(Schedule $schedule)
-{
-    $schedule->command('posts:publish-scheduled')->everyMinute();
-    $schedule->command('db:optimize')->daily();
-}
-```
-
-#### 3. Schedule'ın Çalıştırılması
-
-Sunucuda schedule görevlerinin çalışması için aşağıdaki komutun **sürekli** çalışması gerekir:
-
+### 1. Depoyu Klonla
 ```bash
-php artisan schedule:work
+git clone https://github.com/easytradetr/blog-page-easytradetr.git
+cd blog-page-easytradetr
 ```
-veya
+
+### 2. Bağımlılıkları Yükle
 ```bash
-* * * * * cd /proje_yolu/backend && php artisan schedule:run >> /dev/null 2>&1
+npm install
+# veya
+yarn install
+# veya
+pnpm install
 ```
-(Bu satırı sunucunun crontab’ına ekleyebilirsin.)
+
+### 3. Ortam Değişkenlerini Ayarla
+Ana dizinde `.env.local` dosyası oluştur:
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1 # (Laravel API kullanıyorsan)
+```
+Supabase projenizden bu bilgileri alın.
+
+### 4. Geliştirme Sunucusunu Başlat
+```bash
+npm run dev
+# veya
+yarn dev
+# veya
+pnpm dev
+```
+
+Uygulama [http://localhost:3000](http://localhost:3000) adresinde çalışır.
 
 ---
 
-## Özetle
+## Supabase Kurulumu
 
-- **blog_backup.json** ile tüm verileri kolayca yükleyebilirsin.
-- **Seeder** ile yükleme işlemi otomatikleşir.
-- **Laravel Schedule** ile zamanlanmış görevler (ör. otomatik yayınlama) arka planda çalışır.
+1. [Supabase](https://supabase.com/) hesabı açın ve yeni bir proje oluşturun.
+2. **Tabloları oluşturun:**
+   - `posts`, `categories`, `authors`, `tags`, `media`, `users`, `comments` vb.
+   - Gerekli ilişkileri (foreign key) kurun.
+3. **Storage bucket** oluşturun (ör: `media`) ve public yapın.
+4. **Auth** ayarlarını yapın (email ile kayıt/giriş önerilir).
+5. Ortam değişkenlerini `.env.local` dosyanıza ekleyin.
 
-Her türlü soru ve katkı için iletişime geçebilirsiniz! 
+---
+
+## Proje Yapısı
+
+```
+blog-page-easytradetr/
+├── frontend/
+│   ├── app/           # Next.js app router sayfaları
+│   ├── components/    # UI ve yardımcı bileşenler
+│   ├── hooks/         # React custom hook'lar
+│   ├── lib/           # API, Supabase client, yardımcı fonksiyonlar
+│   ├── public/        # Statik dosyalar/görseller
+│   ├── styles/        # Global ve output CSS
+│   └── ...
+├── README.md
+└── ...
+```
+
+---
+
+## Geliştirme
+
+- **Yeni Sayfa Eklemek:**
+  - `frontend/app/` altında yeni bir klasör ve `page.tsx` oluştur.
+- **Yeni Bileşen Eklemek:**
+  - `frontend/components/` altında oluştur.
+- **API Fonksiyonu Eklemek:**
+  - `frontend/lib/api.ts` dosyasına ekle.
+- **Supabase ile Çalışmak:**
+  - `frontend/lib/supabaseClient.ts` ile Supabase fonksiyonlarını kullan.
+
+---
+
+## Ortam Değişkenleri
+
+| Değişken                      | Açıklama                        |
+|-------------------------------|---------------------------------|
+| NEXT_PUBLIC_SUPABASE_URL      | Supabase projesi URL'i          |
+| NEXT_PUBLIC_SUPABASE_ANON_KEY | Supabase anon anahtarı          |
+| NEXT_PUBLIC_API_URL           | (Varsa) Laravel API endpoint'i  |
+
+---
+
+## Sık Kullanılan Komutlar
+
+| Komut           | Açıklama                |
+|-----------------|------------------------|
+| npm run dev     | Geliştirme sunucusu    |
+| npm run build   | Production build       |
+| npm run start   | Production başlat      |
+| npm run lint    | Linter çalıştır        |
+
+---
+
+## Katkı Sağlama
+
+1. Fork'la ve yeni bir branch aç.
+2. Değişikliklerini yap.
+3. PR (Pull Request) gönder.
+4. Kodun okunabilir, test edilebilir ve açıklamalı olmasına dikkat et.
+
+---
+
+## Sıkça Sorulan Sorular
+
+- **Görseller yüklenmiyor:** Supabase Storage bucket'ı public mi, ortam değişkenleri doğru mu?
+- **Yazar/Kategori gözükmüyor:** Post tablosunda author_id ve category_id alanları doğru mu?
+- **Admin paneline giriş yapamıyorum:** Supabase Auth ayarlarını ve kullanıcı kaydını kontrol et.
+
+---
+
+## Lisans
+
+MIT
+
+---
+
+## İletişim & Destek
+
+Her türlü soru ve destek için [EasyTradeTR](mailto:destek@easytradetr.com) ile iletişime geçebilirsiniz. 

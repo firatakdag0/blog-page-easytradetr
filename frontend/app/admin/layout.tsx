@@ -42,7 +42,9 @@ import {
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Suspense } from "react"
-import { apiClient } from "@/lib/api"
+import { getCurrentUser } from "@/lib/api";
+import { supabase } from "@/lib/supabaseClient";
+import { getAdminPostsFromSupabase, getCommentsFromSupabase } from "@/lib/api";
 
 const sidebarItems = [
   {
@@ -143,28 +145,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const checkAuthAndLoadData = async () => {
       // Authentication kontrolü
-      if (!apiClient.isAuthenticated()) {
+      const { data } = await supabase.auth.getSession();
+      if (!data?.session) {
         router.push('/admin/login')
         return
       }
-
       try {
         // Kullanıcı bilgilerini al
-        const currentUser = await apiClient.getCurrentUser()
-        setUser(currentUser)
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
 
         // İstatistikleri yükle
-        const [postsRes, comments] = await Promise.all([
-          apiClient.getAdminPosts({ per_page: 100 }),
-          apiClient.getAllComments(),
-        ])
-        const posts = postsRes.data;
+        const [postsData, commentsData] = await Promise.all([
+          getAdminPostsFromSupabase({ per_page: 100 }),
+          getCommentsFromSupabase({ per_page: 100 }),
+        ]);
+        const posts: any[] = postsData?.data || [];
+        const comments: any[] = commentsData?.data || [];
 
-        const publishedPosts = posts.filter(p => p.status === "published").length
-        const featuredPosts = posts.filter(p => p.is_featured).length
-        const trendingPosts = posts.filter(p => p.is_trending).length
-        const totalViews = posts.reduce((sum, p) => sum + p.views_count, 0)
-        const totalLikes = posts.reduce((sum, p) => sum + p.likes_count, 0)
+        const publishedPosts = posts.filter((p: any) => p.status === "published").length;
+        const featuredPosts = posts.filter((p: any) => p.is_featured).length;
+        const trendingPosts = posts.filter((p: any) => p.is_trending).length;
+        const totalViews = posts.reduce((sum: number, p: any) => sum + (p.views_count || 0), 0);
+        const totalLikes = posts.reduce((sum: number, p: any) => sum + (p.likes_count || 0), 0);
 
         setStats({
           totalPosts: posts.length,
@@ -174,13 +177,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           totalComments: comments.length,
           featuredPosts,
           trendingPosts,
-        })
+        });
       } catch (err) {
         console.error("Auth or stats fetch error:", err)
-        // Authentication hatası varsa login sayfasına yönlendir
-        if (err instanceof Error && err.message.includes('Authentication')) {
-          router.push('/admin/login')
-        }
+        router.push('/admin/login')
       } finally {
         setLoading(false)
       }
@@ -191,7 +191,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogout = async () => {
     try {
-      await apiClient.logout()
+      // apiClient.logout() // Bu kısım Supabase Auth'a geçirilebilir
       router.push('/admin/login')
     } catch (error) {
       console.error('Logout error:', error)

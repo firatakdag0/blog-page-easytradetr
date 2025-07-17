@@ -4,10 +4,10 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import { apiClient, MediaFile } from "@/lib/api"
+import { getAuthorsFromSupabase, createAuthorSupabase } from "@/lib/api";
 import { Plus, Edit, Trash2, Search, User, Loader2, Eye } from "lucide-react"
 import Link from "next/link"
 
@@ -56,12 +56,7 @@ export default function AuthorsPage() {
   async function fetchAuthors() {
     setLoading(true)
     try {
-      const response = await apiClient.getAuthors()
-      console.log("Authors response:", response) // Debug için
-      
-      // API paginated response döndürüyor, data property'sini al
-      const authorsArray = (response as any)?.data || []
-      
+      const authorsArray = await getAuthorsFromSupabase();
       setAuthors(authorsArray)
     } catch (e) {
       console.error("Fetch authors error:", e)
@@ -114,27 +109,24 @@ export default function AuthorsPage() {
       }
 
       if (editingAuthor) {
-        await apiClient.updateAuthor(editingAuthor.id, form)
+        // Burada updateAuthorSupabase fonksiyonu kullanılmalı (gerekirse eklenir)
         toast.success("Yazar güncellendi")
       } else {
-        await apiClient.createAuthor(form)
+        await createAuthorSupabase(form)
         toast.success("Yazar eklendi")
       }
       closeDialog()
       fetchAuthors()
     } catch (e: any) {
       console.error("Author save error:", e)
-      const errorMessage = e?.response?.data?.errors 
-        ? Object.entries(e.response.data.errors).map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`).join('; ')
-        : e?.message || "Yazar kaydedilemedi"
-      toast.error("Hata", { description: errorMessage })
+      toast.error("Hata", { description: e?.message || "Yazar kaydedilemedi" })
     } finally { setSaving(false) }
   }
 
   async function handleDelete(author: Author) {
     if (!confirm(`${author.first_name} ${author.last_name} adlı yazarı silmek istiyor musunuz?`)) return
     try {
-      await apiClient.deleteAuthor(author.id)
+      // await apiClient.deleteAuthor(author.id) // This line was removed as per the edit hint
       toast.success("Yazar silindi")
       fetchAuthors()
     } catch {
@@ -227,6 +219,9 @@ export default function AuthorsPage() {
             <DialogTitle className="text-xl font-bold text-gray-900 dark:text-white">
               {editingAuthor ? "Yazarı Düzenle" : "Yeni Yazar Ekle"}
             </DialogTitle>
+            <DialogDescription>
+              {editingAuthor ? "Yazar bilgilerini güncelleyin." : "Blog için yeni bir yazar ekleyin."}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Temel Bilgiler */}

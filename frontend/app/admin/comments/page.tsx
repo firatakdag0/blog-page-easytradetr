@@ -56,6 +56,7 @@ import {
 import Link from "next/link"
 import { apiClient, Comment, BlogPost } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
+import { getCommentsFromSupabase } from '@/lib/api';
 
 export default function CommentsPage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -82,12 +83,14 @@ export default function CommentsPage() {
       setLoading(true)
       setError(null)
       try {
-        const [commentsRes, postsRes] = await Promise.all([
-          apiClient.getAllComments(),
-          apiClient.getAdminPosts({ per_page: 100 })
-        ])
-        setComments(commentsRes)
-        setPosts(postsRes)
+        // const [commentsRes, postsRes] = await Promise.all([
+        //   apiClient.getAllComments(),
+        //   apiClient.getAdminPosts({ per_page: 100 })
+        // ])
+        const commentsRes = await getCommentsFromSupabase({ per_page: 100 })
+        setComments(commentsRes.data)
+        // Postlar için Supabase fonksiyonu eklenebilir
+        // setPosts(postsRes)
       } catch (err: any) {
         setError("Veriler yüklenemedi.")
       } finally {

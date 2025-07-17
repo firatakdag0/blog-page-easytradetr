@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
-import { apiClient, BlogPost, Category, Comment } from "@/lib/api"
+import { apiClient, BlogPost, Category } from "@/lib/api"
+import { getAdminPostsFromSupabase, getCategoriesFromSupabase, getCommentsFromSupabase } from '@/lib/api';
 import Link from "next/link"
 import { 
   FileText, 
@@ -56,17 +57,17 @@ export default function AdminDashboard() {
     setLoading(true)
     try {
       // Posts
-      const postsApiRes = await apiClient.getAdminPosts({ per_page: 50 })
+      const postsApiRes = await getAdminPostsFromSupabase({ per_page: 50 })
       const postsRes = postsApiRes.data
       const postsPagination = postsApiRes.pagination
       setRecentPosts(postsRes.slice(0, 5))
-      setPostCount(postsPagination?.all_total || postsPagination?.total || postsRes.length)
+      setPostCount(postsPagination?.all_total || postsRes.length)
       // Categories
-      const categoriesRes = await apiClient.getCategories()
+      const categoriesRes = await getCategoriesFromSupabase()
       setCategoryCount(categoriesRes.length)
       // Comments
-      const commentsRes = await apiClient.getAllComments()
-      setCommentCount(commentsRes.length)
+      const commentsRes = await getCommentsFromSupabase()
+      setCommentCount(commentsRes.data ? commentsRes.data.length : 0)
       // İstatistikleri hesapla
       const publishedPosts = postsRes.filter(p => p.status === "published").length
       const draftPosts = postsRes.filter(p => p.status === "draft").length
@@ -348,7 +349,7 @@ export default function AdminDashboard() {
                             <Avatar className="h-4 w-4">
                               <AvatarImage src={post.author.avatar || "/placeholder.svg"} />
                               <AvatarFallback className="text-xs">
-                                {post.author.name.split(" ").map((n) => n[0]).join("")}
+                                {(post.author?.name || "").split(" ").map((n) => n[0]).join("")}
                               </AvatarFallback>
                             </Avatar>
                             {post.author.name}
