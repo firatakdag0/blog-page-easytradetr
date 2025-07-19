@@ -319,7 +319,6 @@ export default function BlogPage() {
         per_page: POSTS_PER_PAGE,
         category: selectedCategory,
         search: searchQuery,
-        status: "published",
       });
       setPosts(res.data);
       setPagination(res.pagination);
@@ -363,7 +362,6 @@ export default function BlogPage() {
                 per_page: POSTS_PER_PAGE,
                 category: selectedCategory,
                 search: searchQuery,
-                status: "published",
               });
               setPosts(postsRes.data);
               setPagination(postsRes.pagination);
@@ -390,7 +388,6 @@ export default function BlogPage() {
         page: 1,
         per_page: 4,
         is_featured: true,
-        status: "published",
       });
       setAllFeaturedPosts(res.data);
     }

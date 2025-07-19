@@ -862,15 +862,39 @@ export async function getAuthorsFromSupabase() {
 export async function getPostBySlugFromSupabase(slug: string) {
   const { data, error } = await supabase
     .from('posts')
-    .select(`*, category:categories(*), author:authors(*), tags:post_tag(*, tag:tags(*))`)
+    .select(`
+      *,
+      author:authors (
+        id, first_name, last_name, email, profile_image, bio, title
+      ),
+      category:categories (
+        id, name, slug, color
+      )
+    `)
     .eq('slug', slug)
     .single();
   if (error) throw error;
-  // tags alanını düzleştir
-  return {
-    ...data,
-    tags: (data?.tags || []).map((pt: any) => pt.tag),
-  };
+  // Author alanını frontend'in beklediği şekilde dönüştür
+  if (data && data.author) {
+    data.author = {
+      ...data.author,
+      name: [data.author.first_name, data.author.last_name].filter(Boolean).join(' '),
+      avatar: data.author.profile_image
+    }
+  }
+  return data;
+}
+
+// Rastgele benzer yazılar getirir (kendisi hariç)
+export async function getRandomPostsFromSupabase(exclude_post_id: number, limit = 3) {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('id, title, slug, featured_image, excerpt, published_at')
+    .neq('id', exclude_post_id);
+  if (error) throw error;
+  // Rastgele karıştır ve limit kadar döndür
+  const shuffled = (data || []).sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, limit);
 }
 
 export async function getAdminPostsFromSupabase({
@@ -1014,29 +1038,31 @@ export async function getMediaFromSupabase({
 
 // Supabase Storage'a medya dosyası yükleme fonksiyonu
 type UploadMediaResult = { url: string; id?: number; mediaRow?: any };
-export async function uploadMediaToSupabase(file: File, customName?: string, uploadedBy?: string): Promise<UploadMediaResult> {
+export async function uploadMediaToSupabase(
+  file: File,
+  customFileName?: string,
+  userId?: string
+): Promise<UploadMediaResult> {
   // 1. Supabase Storage'a yükle
   const fileExt = file.name.split('.').pop();
-  const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+  const fileName = customFileName
+    ? `${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${customFileName}`
+    : `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
   const { data, error } = await supabase.storage.from('media').upload(fileName, file);
   if (error) throw error;
   // 2. Public URL al
   const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(fileName);
   const url = publicUrlData?.publicUrl || '';
-  // 3. Media tablosuna kaydet
-  const fileType = file.type.startsWith("image/") ? "image"
-    : file.type.startsWith("video/") ? "video"
-    : file.type.startsWith("audio/") ? "audio"
-    : "other";
+  // 3. Media tablosuna kaydet (user_id göndermiyoruz)
   const { data: mediaRow, error: mediaError } = await supabase
     .from('media')
-    .insert([{ 
-      url, 
-      type: fileType, // burada
-      name: customName || file.name, 
-      size: file.size, 
-      mime_type: file.type,
-      uploaded_by: uploadedBy
+    .insert([{
+      url,
+      type: file.type.startsWith('image/') ? 'image' : file.type,
+      name: customFileName || file.name,
+      size: file.size,
+      mime_type: file.type
+      // user_id: userId // KALDIRILDI
     }])
     .select()
     .single();

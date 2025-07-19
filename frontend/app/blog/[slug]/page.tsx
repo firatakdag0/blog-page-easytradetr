@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { apiClient, BlogPost, getResponsiveImageUrl, getPostBySlugFromSupabase, incrementPostViewCount } from "@/lib/api"
+import { apiClient, BlogPost, getResponsiveImageUrl, getPostBySlugFromSupabase, incrementPostViewCount, getRandomPostsFromSupabase } from "@/lib/api"
 import { Calendar, Clock, Facebook, Twitter, Linkedin, Link2 } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import ReactMarkdown from "react-markdown"
@@ -66,27 +66,16 @@ export default function BlogPostPage() {
     }
   }, [postData?.id]);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+  // Benzer yazılar için useEffect'i güncelle:
   useEffect(() => {
-    if (!postData?.category?.slug) return;
+    if (!postData?.id) return;
     setRelatedLoading(true);
     setRelatedError(null);
-    fetch(`${API_BASE_URL}/api/v1/posts?per_page=10`)
-      .then(res => res.json())
-      .then(data => {
-        console.log('Benzer yazılar API URL:', `${API_BASE_URL}/api/v1/posts?per_page=10`);
-        console.log('Benzer yazılar API yanıtı:', data);
-        if (data && data.data && Array.isArray(data.data.data)) {
-          const allPosts = data.data.data.filter((p: any) => p.id !== postData.id);
-          const shuffled = allPosts.sort(() => 0.5 - Math.random());
-          setRelatedPosts(shuffled.slice(0, 3));
-        } else {
-          setRelatedPosts([]);
-        }
-      })
+    getRandomPostsFromSupabase(postData.id)
+      .then(setRelatedPosts)
       .catch(() => setRelatedError("Benzer yazılar yüklenemedi."))
       .finally(() => setRelatedLoading(false));
-  }, [postData?.category?.slug, postData?.id]);
+  }, [postData?.id]);
 
   // Split content into pages by every 5 '##' (h2) sections, including all content up to the 6th heading in the next page
   function splitContentByH2(content: string, perPage: number = 5): string[] {
@@ -228,7 +217,6 @@ export default function BlogPostPage() {
                   <div className="flex flex-wrap gap-4 text-sm opacity-90 items-center">
                     <span className="flex items-center gap-1"><Calendar className="h-4 w-4 text-[hsl(135,100%,50%)]" />{new Date(postData.published_at).toLocaleDateString("tr-TR")}</span>
                     <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-[hsl(135,100%,50%)]" />{postData.read_time} dk okuma</span>
-                    <span>{postData.author?.name}</span>
                   </div>
                   {postData.tags && postData.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2">
@@ -491,7 +479,6 @@ export default function BlogPostPage() {
                 <div className="flex flex-wrap gap-4 text-sm opacity-90 items-center">
               <span className="flex items-center gap-1"><Calendar className="h-4 w-4 text-[hsl(135,100%,50%)]" />{new Date(postData.published_at).toLocaleDateString("tr-TR")}</span>
               <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-[hsl(135,100%,50%)]" />{postData.read_time} dk okuma</span>
-              <span>{postData.author?.name}</span>
             </div>
             {postData.tags && postData.tags.length > 0 && (
                   <div className="flex flex-wrap gap-2">

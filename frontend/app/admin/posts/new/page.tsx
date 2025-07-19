@@ -47,7 +47,7 @@ import dynamic from "next/dynamic"
 const SimpleMDE = dynamic(() => import("react-simplemde-editor"), { ssr: false }) as any
 import "easymde/dist/easymde.min.css"
 import { ImagePositionEditor } from "@/components/ui/image-position-editor";
-import { getCategoriesFromSupabase, getAuthorsFromSupabase, createPostWithSupabase } from '@/lib/api';
+import { getCategoriesFromSupabase, getAuthorsFromSupabase, createPostWithSupabase, getMediaFromSupabase } from '@/lib/api';
 
 export default function NewPostPage() {
   const [title, setTitle] = useState("")
@@ -235,9 +235,8 @@ export default function NewPostPage() {
   const fetchMediaFiles = async () => {
     setMediaLoading(true)
     try {
-      const response = await apiClient.getMedia({
+      const response = await getMediaFromSupabase({
         search: mediaSearchQuery,
-        type: "image",
         per_page: 50
       })
       setMediaFiles(response.data)
